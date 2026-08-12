@@ -1,12 +1,16 @@
+
 build*/
+# Build outputs
 firmware.bin
 *.ino.cpp
-*.ino.elf
 node_modules/
-bin/
 .pio
-.vscode
+.playwright-mcp/
+# Playwright test artifacts
+.sisyphus/
+# Sisyphus planning artifacts
 test/playwright/logs/
 test/playwright/*.md
 test/playwright/.playwright-mcp/
 test/playwright/screenshots/
+.vscode
