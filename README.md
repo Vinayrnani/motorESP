@@ -1,188 +1,158 @@
-# Egg Incubator Controller
+# motorESP — Submersible Pump Controller
 
-An ESP8266-based automatic egg incubator controller with web interface, temperature/humidity control, Data logging, and OTA updates.
+ESP8266-based submersible pump automation controller with PZEM 004T power metering, multi-layer motor protection, flash data logging, web UI, and OTA updates. Derived from the eggubator framework (WiFi manager, SAT, flash logging, embedded-asset web UI kept; all incubator logic replaced).
 
-## Hardware Setup
+## Hardware
 
 ### Components
-- **ESP8266 NodeMCU** - Main controller
-- **DHT22** - Temperature & humidity sensor
-- **Relay Module** (3-channel)
-  - Heater relay
-  - Atomizer/ultrasonic mist maker relay
-  - Fan relay
-- **Servo SG90** - Egg turner
-- **Power Supply** - 5V for ESP8266, 12V for heater/atomizer
+- **ESP8266 NodeMCU** — main controller
+- **PZEM 004T V4.0 (100A)** — voltage / current / power / energy / PF / frequency (Modbus-RTU 9600)
+- **4-channel 5V relay module** (active LOW) — START1, STOP, START2, SPARE
+- **240VAC coil contactor** with AUX self-latch — carries the pump load
+- **GREEN (NO) / RED (NC) push buttons** — physical start / stop
+- **HLK-PM01** — 5V supply (1A min) for ESP + relays
 
 ### Pin Mapping
 | Pin | Device | Function |
 |-----|--------|----------|
-| D1 | Relay 1 | Heater |
-| D2 | Relay 2 | Atomizer (humidity) |
-| D3 | Relay 3 | Fan |
-| D4 | DHT22 | Temperature/Humidity sensor |
-| D5 | Servo | Egg turning motor |
+| D1 (GPIO5) | Relay CH1 (NO) | START1 — start pulse |
+| D2 (GPIO4) | Relay CH2 (NC) | STOP — breaks coil (stop pulse) |
+| D4 (GPIO2) | Relay CH3 (NO) | START2 — start pulse (series with CH1) |
+| D7 (GPIO13) | Relay CH4 | SPARE |
+| D5 (GPIO14) | PZEM TX → D5 | Modbus TX |
+| D6 (GPIO12) | PZEM RX ← D6 | Modbus RX |
 
-All pin assignments are in `config.h`.
+**All relays are PULSE type, 500ms.** CH1 + CH3 are wired in **series** for START (both must close). CH2 (NC) sits in series with the contactor coil for STOP. Relays are **active LOW**: `digitalWrite(pin, HIGH)` = relay OFF, `LOW` = ON. Getting this wrong can overheat or damage hardware.
+
+PZEM: voltage terminals L&N BEFORE the contactor (always powered → pre-start voltage check possible); CT clamps the live wire to the contactor. Max readable voltage 260V (site runs 240V loaded / 290V no-load — high voltage only drives warnings, never measurement destruction).
 
 ## Features
 
-### Temperature Control
-- Target: 37.5°C (±0.3°C hysteresis)
-- Automatic heater on/off
-- Overheat protection: fan ON when temp > 38°C
+### Motor Protection
+| Protection | Trigger | Delay | Result |
+|------------|---------|-------|--------|
+| Overcurrent (start) | current ≥ 50A | instant | Trip + lockout/retry |
+| Overcurrent (running) | current ≥ 12A | 5s | Trip |
+| Dry-run | current < 4A AND power < 500W | 15s | Trip (armed 60s after start) |
+| Overvoltage (running) | voltage > 250V | 3s | Trip + 5min voltage lockout |
+| Undervoltage (running) | voltage < 190V | 3s | Trip + 5min voltage lockout |
+| PZEM fault | read timeout 500ms × 3 retries | fail-safe | Trip OFF |
+| Start failure | current < 2A at verify (1s after pulse) | — | Trip + 30s retry block |
 
-### Humidity Control (Pulsating Mode)
-- Target: 55% RH (incubation), 65% RH (lockdown)
-- **3 seconds ON → 10 seconds OFF** cycle (configurable)
-- Repeats until target humidity reached
-- When humidity is high (> target + 5%), atomizer stays OFF
+Pre-start: voltage ≥ 280V (critical) blocks start; ≥ 250V (warning) shows warning.
 
-### Fan Control (Smart Timing)
-- ON when heater is ON
-- Continues **3 seconds after heater turns OFF**
-- ON when atomizer is ON (spreads humidity)
-- Continues **3 seconds after atomizer turns OFF**
-- OFF only when both temperature and humidity are stable
-- ON when temperature > 38°C (overheat protection)
+### Trip Behavior
+- Per-protection **LOCKOUT** or **AUTO-RETRY** (configurable)
+- AUTO-RETRY: 300s default delay, max 3 retries; fault recurring within 10s = fast fault; 3 fast faults = **PERMANENT LOCKOUT** (manual reset required)
+- **Trip persistence**: trip state saved to EEPROM only when the trip type changes (debounced) — survives power loss; on boot an active trip blocks pump start until manual reset
+- **Power restoration**: always requires manual start ("POWER RESTORED — MANUAL START REQUIRED")
+- **Manual start detection**: physical GREEN button start is detected via PZEM current (> 2A) and the ESP auto-updates its state to RUNNING
+- **Safety**: 3 independent stop paths (RED button, CH2 NC relay, ESP software); protection trip overrides OFF/MANUAL/AUTO modes
 
-### Egg Turner
-- Automatic rotation every 2 hours (configurable)
-- Smooth ease-in-out movement over 10 seconds (configurable)
-- Angle adjustment (-40 to +40) via settings page
-- Disabled during lockdown stage (day 18+)
+### Modes
+- **OFF** — kill
+- **MANUAL** — web ON/OFF buttons
+- **AUTO** — time-of-day schedule (placeholder, SAT elapsed time)
 
 ### Data Logging
-- Logs to **serial flash memory** at 0x200000 (not EEPROM)
-- Stores **131,072 entries** across 256 circular sectors
-- Each entry: timestamp, temp, humidity, device states (5-byte overhead)
-- Auto-purges oldest when circular buffer wraps
-- Boot sessions tracked with meta entries for absolute time recovery
-- Correction logs (invisible) handle time drift across reboots
+- 11-byte packed entries in **flash circular buffer** at 0x200000 (256 sectors × 4096B = 95,232 entries)
+- Entry: timeSec(4) + voltage offset from 200V(1) + current A×10(2) + energy delta Wh(1) + PF×100(1) + states(1) + bootId(1)
+- Energy stored as delta → survives power loss and PZEM 9999kWh wrap
+- Meta markers in PF byte: 0xFE = sector pointer, 0xFF = SAT correction
+- State bits: 1 RUNNING, 2 OC, 4 DRYRUN, 8 OVERVOLT, 16 UNDERVOLT, 32 AUTO, 64 PZEM, 128 STARTFAIL
+- Log intervals: 10s running (5–60s), 60s OFF (30–600s); always logs on state change
 
 ### Web Interface
-- Live temperature & humidity display with device controls
-- **Interactive Chart.js charts** with zoom, pan, and decimation
-- **SAT (Synchronised Absolute Timestamp)** syncs boot history across reboots
-- **Dexie.js (IndexedDB)** stores historical data in browser
-- Device status & settings page
-- OTA firmware update
-- Environment stability analysis (last 24h + entire incubation)
-
-### SAT (Synchronised Absolute Timestamp)
-- Tracks boot sessions across power cycles
-- Recovers sector pointers from flash meta entries (no EEPROM wear)
-- Recovers servo position from last log entry
-- Synchronises incubation timeline between ESP and browser
-- Auto-adjusts for time drift > 5 seconds
-
-### Flash Durability
-- **No per-boot EEPROM writes** — boot ID and sector pointers recovered entirely from flash
-- `recoverBootIdFromFlash()` walks flash backwards on boot to find last boot ID
-- `clearLogs()` uses a `temp=255` meta flag to signal boot ID reset on next boot
-- EEPROM used only for settings changes and SAT drift corrections (infrequent)
+- **Control** `/` — big ON/OFF buttons, mode selector, trip reset, quick V/A/W stats, power-restored banner
+- **Dashboard** `/dashboard` — large numerics (V/A/W/kWh/Hz/PF), status badge, voltage status (Normal/Warning/Critical), Chart.js line charts (power/voltage/current), poll interval 1–5s
+- **Settings** `/settings` — all thresholds (OC, dry-run, voltage zones, start logic, auto-retry, logging intervals, PZEM read interval)
+- **Data** `/data` — paginated log table (boot, time, V, I, Wh, PF, state) with LOAD MORE
+- Dexie.js (IndexedDB) client-side history, SAT sync via `/timestamps`
+- 5 embedded gzipped assets (Chart.js, Dexie, Hammer, chartjs-zoom, Bootstrap) — no CDN
 
 ## Network
 
-- Connects to WiFi via DHCP first
-- Sets static IP ending with **`.72`** (auto-detects subnet/gateway from DHCP)
-- mDNS hostname: `eggubator.local`
-- Falls back to DHCP if static IP fails
+- mDNS `motorESP.local`, static IP ending `.72`
+- AP fallback SSID `motorESP` after 20s (with DNS captive portal), rescans every 15s
+- WiFi independent of pump state — pump keeps running on WiFi loss; silent reconnect; flash logging unaffected
 
-### Connectivity Workflow
-If the device is not reachable, follow this sequence exactly:
-1.  **Attempt mDNS**: Try opening `http://eggubator.local` in your browser.
-2.  **Network Discovery**: If mDNS fails, use network tools (e.g., `ping -c 1 eggubator.local`, or `arp-scan -l`) to find the device.
-3.  **Static IP**: If discovery fails, attempt connection directly via the configured static IP (e.g., `http://192.168.X.72`).
-4.  **Stop & Report**: If none of the above work, the device is unreachable. Inform the user and stop; do not attempt further automated retries.
+## EEPROM Layout (512 bytes)
 
-## Web Interface Endpoints
+| Region | Address | Magic | Content |
+|--------|---------|-------|---------|
+| SAT drift | 15–23 | — | last known boot ID + start unix |
+| DeviceSettings | 40 | `0xA2` | pump thresholds, mode, trip state (~48B) |
+| WiFi credentials | 200 | `0xAC` | ssid[33] + password[65] |
 
-| Endpoint | Description |
-|----------|-------------|
-| `/` | Main web dashboard |
-| `/status` | JSON status (temp, humidity, sectors, boot info) |
-| `/data` | JSON sensor data with log pagination |
-| `/settings` | Device settings page |
-| `/settings/api` | Settings API (control, simulation, calibration) |
-| `/control?device=X&mode=Y` | Control devices (heater/atomizer/fan/servo) |
-| `/timestamps` | SAT boot timestamp sync (GET + PUT) |
-| `/ota/check` | Check for updates |
-| `/ota/update` | Trigger OTA update |
-| `/reboot` | Reboot device |
-| `/settings/clear` | Clear all log data and reset boot ID |
+All time settings stored in **seconds** (magic 0xA2). Settings with invalid magic or out-of-range values reset to defaults.
 
-## OTA Updates
+## Web Endpoints
 
-### Manual Update
-Upload firmware via web interface at `http://<IP>/update`
+| Path | Method | Purpose |
+|------|--------|---------|
+| `/` | GET | Control page |
+| `/dashboard` | GET | Dashboard page |
+| `/settings` | GET | Settings page |
+| `/data` | GET | Data page |
+| `/status` | GET | JSON: V, A, W, kWh, Hz, PF, pump state, protection state, heap, uptime |
+| `/data/api` | GET | JSON log payload (pagination via `boot`, `time`, `count`) |
+| `/control` | GET | `action=start\|stop\|reset\|mode` (mode=N) |
+| `/settings/api` | GET/POST | Read/write config, mock enable + profiles, WiFi creds, `action=newBatch` |
+| `/timestamps` | GET/PUT | SAT boot table sync |
+| `/ota/check` | GET | Compare version vs GitHub release |
+| `/ota/apply` | POST | Download + flash firmware.bin from GitHub |
+| `/reboot` | GET | `ESP.restart()` |
+| `/settings/clear` | GET | Erase flash logs, reset boot ID, reboot |
+| `/update` | POST | ESP8266HTTPUpdateServer (used by `deploy.sh`) |
+| `/api/sector_hex` | GET/POST | Flash sector hex editor (`sector=X`) |
+| `/lib/*` | GET | Embedded gzipped assets (immutable cache) |
 
-### Auto Update
-1. Host `firmware.bin` at your server
-2. Host `version.txt` with version string (e.g., "1.3.13")
-3. Update URLs in `updates.h`:
-```cpp
-#define FIRMWARE_URL "http://your-server/firmware.bin"
-#define VERSION_URL "http://your-server/version.txt"
+### Mock Mode (no hardware)
 ```
-
-## File Structure
-
-```
-eggubator/
-├── eggubator.ino        # Main sketch
-├── config.h             # Configuration constants (pins, thresholds)
-├── dht_sensor.h         # DHT22 sensor + physics simulation
-├── wifi_manager.h       # WiFi connection with static IP
-├── logging.h            # Flash logging + boot session tracking
-├── logging.cpp          # Log read/write, sector management
-├── sat_manager.h        # SAT timing system
-├── sat_manager.cpp      # Timestamp sync, boot table, elapsed time
-├── web_ui.h             # Full web dashboard HTML/CSS/JS (Chart.js + Dexie)
-├── updates.h            # OTA updates + boot recovery
-├── firmware.bin         # Compiled firmware binary
-├── deploy.sh            # OTA deployment via mDNS
-├── .gitignore
-└── test/
-    └── playwright/      # Playwright test artifacts (screenshots, logs, scripts)
+/settings/api?enable=1&mockProfile=running|off|dryrun|oc
+/settings/api?mock=1&mockVoltage=258     # voltage protection testing
 ```
 
 ## Build & Deploy
 
-### Compile
 ```bash
-arduino-cli compile -b esp8266:esp8266:nodemcu eggubator.ino
-```
+# Compile (must run from sketch root — folder name must match .ino name)
+rm -rf build/.cache
+./bin/arduino-cli compile -b esp8266:esp8266:nodemcu -j 0 --build-path build/.cache --output-dir build motorESP.ino
 
-### Deploy via OTA
-```bash
-# Uses mDNS to find device and deploy via OTA update endpoint
+# Deploy OTA (finds device, POSTs to /update)
 ./deploy.sh
+
+# Flash USB (Termux/OTG)
+./flash.sh
+
+# Full release (bump → compile → commit → tag → GitHub Release → OTA)
+./rel.sh [VERSION]        # with OTA deploy
+./rel-nd.sh [VERSION]     # without OTA deploy
 ```
 
-### Flash via USB
-```bash
-esptool.py --chip esp8266 --port /dev/ttyUSB0 --baud 115200 write_flash -z \
-  --flash_size=4MB --flash_mode=dio --flash_freq=40m \
-  0x00000 firmware.bin
+`rel.sh` bumps `updates.h` + `version.txt`, compiles, creates GitHub Release with `firmware.bin`, deploys OTA. `version.txt` must match `FIRMWARE_VERSION` in `updates.h`.
+
+## File Structure
+
+```
+motorESP.ino        # Main sketch: state machine, protections, web handlers, EEPROM
+config.h            # Pins, compile-time defaults, extern declarations
+pzem_sensor.h       # PZEM 004T Modbus interface + mock profiles
+wifi_manager.h      # Async WiFi state machine + DNS captive portal
+logging.h/.cpp      # Flash circular buffer, 11-byte entries, boot sessions
+sat_manager.h/.cpp  # Boot session tracking, absolute time recovery
+updates.h           # OTA check + download from GitHub releases
+web_ui.h            # All HTML/CSS/JS as PROGMEM strings (4 pages)
+embedded_assets.h   # 5 gzipped JS/CSS libs compiled in (no CDN)
+sector_viewer.h     # Flash hex editor tool
+ntp_sync.h          # NTP sync (when internet available)
+docs/               # Architecture references (flash saving, logging, SAT)
+test/playwright/    # Manual Playwright/HTTP smoke tests
+archive/            # Legacy eggubator firmware files
 ```
 
-### Update WiFi Credentials
-Edit `config.h`:
-```cpp
-#define WIFI_SSID "YourNetworkName"
-#define WIFI_PASSWORD "YourPassword"
-```
+## Read More
 
-## Version History
-
-| Version | Changes |
-|---------|---------|
-| **1.3.13** | Chart fixes (boot time drift, SAT sync order), favicon, code cleanup |
-| **1.3.12** | Flash-based sector recovery (no EEPROM), servo position recovery |
-| **1.3.11** | SAT architecture, startSector telemetry, boot session tracking |
-| **1.3.0** | Modular SAT timing, invisible correction logs |
-| **1.2.2** | Recovery system, uptime display, fixed degree symbol |
-| **1.2.1** | Modular code structure, embedded DHT22 (no library) |
-| **1.2.0** | Pulsating humidity (3s/10s), fan timing (5s), charts |
-| **1.1.0** | Basic control with web interface, OTA |
+- `REQUIREMENTS.md` — full requirements, safety analysis, test checklist
+- `REVIEW.md` — architecture review record

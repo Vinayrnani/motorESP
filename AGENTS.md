@@ -1,23 +1,23 @@
-# AGENTS.md — Egg Incubator (ESP8266)
+# AGENTS.md — motorESP (Submersible Pump Controller)
 
-Single-file Arduino firmware for a DHT22-based egg incubator with web UI, flash data logging, and OTA updates. All HTML/CSS/JS lives inside `web_ui.h` as PROGMEM string literals — edit raw HTML embedded in C.
+Single-file-hosted Arduino firmware for an ESP8266 submersible pump controller with PZEM 004T power metering, motor protections, flash data logging, web UI, and OTA updates. All HTML/CSS/JS lives inside `web_ui.h` as PROGMEM string literals — edit raw HTML embedded in C.
 
 ## Build & Deploy
 
 ```bash
-# Compile
-arduino-cli compile -b esp8266:esp8266:nodemcu -j "$(nproc)" --build-path build/.cache --output-dir build eggubator.ino
-cp build/eggubator.ino.bin firmware.bin
+# Compile — MUST run from the sketch root; folder name must equal main .ino name (motorESP)
+rm -rf build/.cache   # stale-cache bug: source edits sometimes not picked up — always rm first
+./bin/arduino-cli compile -b esp8266:esp8266:nodemcu -j 0 --build-path build/.cache --output-dir build motorESP.ino
 
-# Deploy OTA (user insists on this script only)
-./deploy.sh                          # compile + find IP via ping + curl to /update
+# Deploy OTA (find IP via ping of motorESP.local, POST firmware.bin to /update)
+./deploy.sh
 
 # Flash USB (Termux/OTG)
-./flash.sh                           # auto-detect /dev/ttyUSB*, uses esptool.py
+./flash.sh
 
 # Full release (bump → compile → commit → tag → GitHub Release → OTA)
-./rel.sh [VERSION]                   # auto-increment patch if no VERSION arg
-./rel-nd.sh [VERSION]                # same without OTA deploy
+./rel.sh [VERSION]      # auto-increment patch if no VERSION arg; includes OTA deploy
+./rel-nd.sh [VERSION]   # same without OTA deploy
 ```
 
 - `rel.sh` bumps `updates.h` + `version.txt`, compiles, creates GitHub Release with `firmware.bin`, then deploys OTA.
@@ -26,17 +26,18 @@ cp build/eggubator.ino.bin firmware.bin
 
 ## Hardware Conventions
 
-| Component | Pin | Active |
-|-----------|-----|--------|
-| Heater    | D1  | LOW = ON |
-| Atomizer  | D2  | LOW = ON |
-| Fan       | D3  | LOW = ON |
-| Servo     | D5  | PWM (544-2450µs) |
-| DHT22     | D4  | — |
+| Component | Pin | Active | Note |
+|-----------|-----|--------|------|
+| START1 relay | D1 (GPIO5) | LOW = CLOSE | CH1 NO, pulse 500ms |
+| STOP relay | D2 (GPIO4) | LOW = CLOSE | CH2 NC, breaks coil, pulse 500ms |
+| START2 relay | D4 (GPIO2) | LOW = CLOSE | CH3 NO, in SERIES with CH1 |
+| SPARE relay | D7 (GPIO13) | LOW = CLOSE | CH4 unused |
+| PZEM TX | D5 (GPIO14) | — | SoftwareSerial 9600 |
+| PZEM RX | D6 (GPIO12) | — | SoftwareSerial 9600 |
 
-**Relays are active LOW.** `digitalWrite(pin, HIGH)` = OFF, `LOW` = ON. Getting this wrong can overheat or damage hardware.
+**Relays are active LOW.** `digitalWrite(pin, HIGH)` = relay OFF (open), `LOW` = ON (closed). CH1+CH3 both must close for START. CH2 is NC and sits in series with the contactor coil — its pulse opens the circuit = STOP. All relays pulse 500ms, never latched by firmware. Getting polarity wrong can weld contactor contacts or leave the pump running.
 
-Network: mDNS `eggubator.local`, static IP ends in `.72`. Falls back to AP mode (`EGGubator` SSID).
+Network: mDNS `motorESP.local`, static IP ends in `.72`. AP fallback SSID `motorESP` (after 20s) with DNS captive portal, rescans every 15s.
 
 ## WiFi — Async State Machine (not blocking)
 
@@ -51,28 +52,72 @@ WF_CONNECTED ← (auto-reconnect) → WF_RECONNECTING (15s grace)   scan every 1
 - Boot order: `EEPROM.begin(512)` → `loadWifiCredentials()` → `initWiFi()` (non-blocking). Must stay in this order.
 - `initWiFi()` returns immediately; `handleWiFi()` drives state from `loop()`.
 - Priority: saved EEPROM creds → compile-time defaults (`config.h`) → AP fallback.
-- AP mode runs a DNS captive portal and scans every 15s for known networks.
 - `MDNS.begin()` deferred to first WiFi connection in loop (not setup).
 - Saving WiFi creds via web (`/settings/api?wifiSsid=X&wifiPassword=Y`) writes EEPROM at addr 200 — does NOT reconnect. User must reboot.
+- WiFi is independent of pump state: pump keeps running on WiFi loss, silent reconnect, flash logging unaffected.
 
 ## EEPROM Layout
 
 | Region | Address | Magic | Size |
 |--------|---------|-------|------|
 | SAT drift | 15-23 | — | 9 bytes |
-| DeviceSettings | 40 | `0xAB` | 112-byte struct |
+| DeviceSettings | 40 | `0xA2` | struct (~48B, all times in SECONDS) |
 | WiFi credentials | 200 | `0xAC` | `WifiSettings` (98 bytes) |
 
 - `loadWifiCredentials()` reads addr 200 — if magic invalid or SSID empty, keeps compile-time defaults.
 - `saveWifiCredentials()` writes addr 200.
+- `SETTINGS_MAGIC_VAL` = `0xA2` — bump it whenever DeviceSettings layout/semantics change (old EEPROM data then rejected → defaults).
+- `loadSettings()` fully range-validates every field; any out-of-range → `initConfigDefaults()`.
+- **Trip persistence (Option B, debounced)**: `saveActiveTrips()` writes EEPROM ONLY when `activeTrips` value changes (first trip of a sequence); same trip across retries/reboots → no rewrite. On boot, active trip → pump starts in TRIPPED, blocked until manual reset.
 - Flash logging uses **separate** circular buffer at `0x200000` (256 sectors × 4096 bytes) — EEPROM untouched by logging.
+
+## Pump State Machine (motorESP.ino)
+
+```
+OFF → ST_STARTING (start pulse 500ms) → verify (1s, fresh readPZEM()) → RUNNING (current ≥ 2A)
+RUNNING/STARTING → any protection → ST_TRIPPED (all relays released)
+ST_TRIPPED → auto-retry timer (300s, ≤3) or manual reset → OFF
+RUNNING → ST_STOPPING (stop pulse) → OFF
+```
+
+- Relays: `relaysOff()` all HIGH; `fireStartPulse()` CH1+CH3 LOW; `fireStopPulse()` CH2 LOW.
+- **Interlock for START** (startPump): no active trip/permanent lockout, not in start-fail block, not in voltage lockout, min-off elapsed, PZEM valid (or mock), voltage < VOLT_CRITICAL. Manual start bypasses power-restored flag; AUTO/OFF mode never restarts after power restoration.
+- **External manual start**: pump OFF + PZEM current ≥ 2A → auto-state RUNNING (physical GREEN equivalent), clears powerRestored.
+- **External manual stop**: pump RUNNING + current < 0.5A for 1.5s → OFF.
+- **Min run 30s / min off 60s** enforced (web start/stop blocked outside window).
+- Two-stage OC: during first 5s after start uses 50A instant; thereafter 12A with 5s accumulation.
+- Dry-run armed 60s after start; current < 4A AND power < 500W for 15s → trip.
+- Voltage: over 250V / under 190V for 3s → trip + `voltageLockUntil = now + 300s`.
+- PZEM fault: read invalid while RUNNING (and not mock) → immediate trip (fail-safe).
+- Fast-fault: trip recurs within 10s → fastFaultCount++; 3 fast faults → `permanentLockout` (manual reset only).
+- Logging: `handleLogging()` each loop; 11-byte entries; intervals running 10s / OFF 60s; force-log on state change.
+
+## Logging Format (logging.h/.cpp)
+
+`LogEntry` packed 11 bytes: timeSec u32 · voltage u8 (offset from 200V) · current u16 (A×10) · energyDelta u8 (Wh since last entry) · pf u8 (×100; 0xFE/0xFF = meta markers) · states u8 · bootId u8.
+
+- `LOGS_PER_SECTOR` = 372 (auto from struct size), 256 sectors at `0x200000`, 95,232 total entries.
+- Meta markers: pf=0xFE sector pointer, 0xFF SAT correction (real PF 0-100 so both impossible).
+- Energy stored as delta → survives outages + PZEM 9999kWh wrap; total accumulates in RAM for /status.
+- State bits: 1 RUNNING · 2 OC · 4 DRYRUN · 8 OVERVOLT · 16 UNDERVOLT · 32 AUTO · 64 PZEM · 128 STARTFAIL.
+- Brokers/browsers decode hex; skip entries with pf ≥ 0xFE.
+
+## PZEM 004T (pzem_sensor.h)
+
+- Modbus-RTU 9600 on SoftwareSerial D5(TX)/D6(RX), V4.0 100A uses same protocol as V3.0 (mandulaj).
+- Read command {0xF8, 0x04, 0x00, 0x00, 0x00, 0x0A, 0x64, 0x64} → 25-byte response, big-endian decode.
+- voltage = be16×0.1; current = be32×0.001; power = be32×0.1; energy = be32 (Wh); freq = be16×0.1; pf = be16×0.01.
+- 3 retries × 500ms timeout; fail → `valid=false`.
+- Mock: `useMockPZEM` + globals `mockVoltage/mockCurrent/mockPower/mockEnergy/mockFrequency/mockPF` defined in motorESP.ino; profiles `setMockRunning/setMockOff/setMockDryRun/setMockOvercurrent`.
+- All functions `static` in header (included by both logging.cpp and motorESP.ino — no duplicate symbols).
 
 ## Verification
 
-1. **Compile** — must succeed with zero errors.
-2. **Browser** — `http://eggubator.local/`, dashboard loads, `/status` returns JSON.
+1. **Compile** — must succeed with zero errors (`rm -rf build/.cache` first).
+2. **Browser** — `http://motorESP.local/`, Control page loads, `/status` returns JSON.
 3. **Manual Playwright tests** at `test/playwright/test_*.js` — `node test_xxx.js` (device must be reachable).
-4. **Mock mode** (no hardware): `/settings/api?enable=1&temp=37.5&hum=55` or `/settings/api?autosim=1`.
+4. **Mock mode** (no hardware): `/settings/api?enable=1&mockProfile=running|dryrun|oc|off` or `/settings/api?mock=1&mockVoltage=258`.
+5. **Acceptance matrix**: each protection trips with correct bit (2/4/8/16/64/128); trip survives /reboot; auto-retry schedules; permanent lockout after 3 fast faults; min-run/min-off blocks; critical-voltage start block; external manual start/stops; all pages HTTP 200; `/data/api` valid JSON.
 
 ## Embedded Assets (no internet needed)
 
@@ -90,56 +135,30 @@ WF_CONNECTED ← (auto-reconnect) → WF_RECONNECTING (15s grace)   scan every 1
 - Registered as routes in `setup()` via `EMBEDDED_ASSETS` table.
 - Web UI (`web_ui.h`) loads these paths — they resolve locally, not from CDN.
 
-## SVG Icons & Animation Quirks
-
-- 4 stat cards (heater, atomizer, fan, servo) use **Font Awesome solid SVG paths** with `fill="currentColor"`.
-- **SVG class assignment must use `setAttribute('class', ...)`** not `.className =` — SVG's `SVGAnimatedString` silently ignores string assignment.
-- Fan rotation uses CSS animation `.svg-spin` with `transform-box: fill-box` for reliable centering.
-
-## File Map
-
-| File | Purpose |
-|------|---------|
-| `eggubator.ino` | Setup/loop, web handlers, auto-control, EEPROM save/load |
-| `config.h` | Pin defs, compile-time WiFi defaults, hysteresis |
-| `dht_sensor.h` | DHT22 read + physics simulation (mock/auto-sim) |
-| `wifi_manager.h` | Async WiFi state machine + DNS captive portal |
-| `logging.h` / `.cpp` | Flash circular buffer (256 sectors at `0x200000`) |
-| `sat_manager.h` / `.cpp` | Boot session tracking, absolute time recovery across reboots |
-| `updates.h` | OTA check + download from GitHub releases |
-| `web_ui.h` | Single file: all HTML/CSS/JS as PROGMEM strings |
-| `embedded_assets.h` | 5 gzipped JS/CSS libs compiled in (no CDN) |
-| `sector_viewer.h` | Flash hex editor tool |
-
-## Key Architecture Notes
-
-- **Timing globals** (`LOG_INTERVAL`, `EGG_TURN_INTERVAL`, `PULSE_ON/OFF_TIME`, `TARGET_TEMP/HUMIDITY`) are web-modifiable, not compile-time constants.
-- **SAT**: browser syncs timeline across power cycles via `/timestamps` (GET/PUT). `batchStartUnix` + `getElapsedSeconds()` = incubation day.
-- **Servo**: 32 steps × 6°, center at step 15 (90°). Stage lockdown (day 18+) disables turning and moves servo to center.
-- **DHT fallback**: if `isnan()`, returns last valid reading; temp/hum validation also requires > 0.
-- **Servo pin (D5=GPIO14) held LOW during boot** to suppress SPI noise — must happen before any other pin init on GPIO14.
-- **No external Arduino libraries beyond ESP8266 core** + `Servo.h`, `DHT.h`. DHT has local bit-banged fallback.
-- **No CI, no linter, no formatter config.**
-
 ## Web Endpoints
 
 | Path | Method | Purpose |
 |------|--------|---------|
-| `/status` | GET | JSON: temp, humidity, device states, version, boot info |
-| `/data` | GET | JSON sensor log (pagination via `boot`, `time`, `count`) |
-| `/settings/api` | GET/POST | Mock/autosim, timing, stage, servo angles, WiFi creds |
-| `/control?device=X&mode=Y` | GET | `off` = kill override, anything else = auto |
-| `/settings/clear` | GET | Erase flash logs, reset boot ID, reboot |
-| `/ota/check` | GET | Compare version vs GitHub release |
-| `/ota/apply` | POST | Download + flash firmware.bin from GitHub |
+| `/` | GET | Control page (ON/OFF, mode, reset, V/A/W) |
+| `/dashboard` | GET | Dashboard page (charts, numerics, polling 1-5s) |
+| `/settings` | GET | Settings page |
+| `/data` | GET | Data page (paginated table) |
+| `/status` | GET | JSON: V/A/W/kWh/Hz/PF, pump state, trips, uptime, version, mock |
+| `/data/api` | GET | JSON logs (`count`/`boot`/`time` pagination) |
+| `/control` | GET | `action=start\|stop\|reset\|mode` |
+| `/settings/api` | GET/POST | Read/write config, mock, WiFi creds, `action=newBatch` |
 | `/timestamps` | GET/PUT | SAT boot table sync |
+| `/ota/check` | GET | Version vs GitHub release |
+| `/ota/apply` | POST | Download + flash firmware.bin from GitHub |
 | `/reboot` | GET | `ESP.restart()` |
+| `/settings/clear` | GET | Erase flash logs, reset boot ID, reboot |
 | `/update` | POST | ESP8266HTTPUpdateServer (used by `deploy.sh`) |
+| `/api/sector_hex` | GET/POST | Flash hex editor (`?sector=N`) |
 
 ## Connectivity (when device unreachable)
 
-1. `http://eggubator.local`
-2. `ping -c 1 eggubator.local` or `arp-scan -l`
+1. `http://motorESP.local`
+2. `ping -c 1 motorESP.local` or `arp-scan -l`
 3. `http://192.168.X.72` (X from DHCP subnet)
 4. If all fail, report unreachable — no automated retries.
 
@@ -147,10 +166,44 @@ WF_CONNECTED ← (auto-reconnect) → WF_RECONNECTING (15s grace)   scan every 1
 
 - `config.h` has actual WiFi credentials — don't commit changes to it.
 - `firmware.bin` is gitignored but release scripts stage it explicitly.
+- **Stale build cache**: if a source edit doesn't appear in the binary, `rm -rf build/.cache` before compiling.
+- `s.trim()` returns void in ESP8266 String — use `substring(0, length-1)`.
+- `"const char*" + macro` is invalid C++ — wrap in `String(...)` first.
+- All DeviceSettings time fields are SECONDS on the wire and in EEPROM; internal globals are milliseconds (`OC_DELAY` etc.).
 - `wifiSsid`/`wifiPassword` globals in `wifi_manager.h` are runtime-writable — EEPROM loads over defaults on boot if valid.
 - Clearing WiFi creds (empty SSID via web) resets to compile-time defaults in `config.h`.
-- SVG `className` assignment fails silently — always use `setAttribute('class', ...)`.
 - `EEPROM.begin(512)` must happen before `loadWifiCredentials()` and `initWiFi()`.
 - mDNS blocked on mobile hotspots — device unreachable via `.local` when connected through phone hotspot.
-- Firmware IRAM ~94% full (~385KB IROM headroom) — tight on `.text` sections.
-- No automated test runner. No CI. No formatter. No linter.
+- Firmware IROM ~59% used (~1MB IROM); no external Arduino libraries beyond ESP8266 core + SoftwareSerial.
+- OTA deploy: device reboots ~15–25s after "Update Success!"; bootId may stay constant across reboots (recoverBootIdFromFlash behavior — harmless).
+- Cloudflare trycloudflare tunnels rotate; 502 = tunnel dead, ask user for a new URL. Device reachable ONLY via tunnel URL in field tests.
+- No CI, no linter, no formatter, no automated test runner.
+
+## Repo Layout
+
+```
+motorESP.ino        # Main sketch: state machine, protections, web handlers, EEPROM
+config.h            # Pins, compile-time defaults, extern declarations
+pzem_sensor.h       # PZEM 004T Modbus + mock profiles
+wifi_manager.h      # Async WiFi + captive portal
+logging.h/.cpp      # Flash circular buffer + boot sessions
+sat_manager.h/.cpp  # SAT timing
+updates.h           # OTA from GitHub releases
+web_ui.h            # 4 pages of HTML/CSS/JS (PROGMEM)
+embedded_assets.h   # 5 gzipped libs
+sector_viewer.h     # Flash hex editor
+ntp_sync.h          # NTP sync
+docs/               # Architecture docs (flash saving, logging, SAT)
+test/playwright/    # Manual smoke tests
+archive/            # Legacy eggubator files (reference only)
+```
+
+## Settings API Field Ranges (seconds where applicable)
+
+- ocRunning 5-50A · ocStartInstant 20-100A · ocDelay 1-30s
+- dryRunCurrent 1-10A · dryRunPower 100-2000W · dryRunDelay 1-300s · dryRunActivation 0-3600s
+- voltOver 200-280V · voltUnder 150-230V · voltWarn 240-280V · voltCritical 250-300V · voltageDelay 1-60s · voltageLockout 0-3600s
+- startSuccessCurrent 0.5-5A · startVerifyDelay 1-10s · startFailBlock 1-600s
+- minRun 10-300s · minOff 10-600s
+- autoRetryDelay 60-3600s · maxRetries 1-10 · maxFastFaults 1-10 · fastFaultWindow 5-60s
+- logIntervalRunning 5-60s · logIntervalOff 30-600s · pzemReadRunning 1-5s · pzemReadOff 1-10s
