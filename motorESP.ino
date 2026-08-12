@@ -1056,15 +1056,7 @@ void handleSettingsApi() {
 
     if (server.hasArg("action")) {
       String action = server.arg("action");
-      if (action == "newBatch" && server.hasArg("timestamp")) {
-        batchStartUnix = (uint32_t)server.arg("timestamp").toInt();
-        clearLogs();
-        saveSettings();
-        server.send(200, "text/plain", "New batch started");
-        delay(100);
-        ESP.restart();
-        return;
-      } else if (action == "resetTrips") {
+      if (action == "resetTrips") {
         resetTrips();
         server.send(200, "text/plain", "Trips reset");
         return;

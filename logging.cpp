@@ -24,6 +24,11 @@ bool isMetaEntry(const LogEntry &entry) {
   return (entry.pf == META_SECTOR_POINTER || entry.pf == META_CORRECTION);
 }
 
+
+bool validLogEntry(const LogEntry &entry) {
+  return entry.timeSec < 0x40000000UL && entry.bootId < 250;
+}
+
 void writeMetaEntry() {
   LogEntry entry;
   entry.timeSec = startSector;
@@ -35,7 +40,7 @@ void writeMetaEntry() {
   entry.bootId = currentBootId;
 
   uint32_t writeAddr = FLASH_LOG_START + (currentSector * FLASH_SECTOR_SIZE);
-  ESP.flashWrite(writeAddr, (uint32_t*)&entry, sizeof(LogEntry));
+  ESP.flashWrite(writeAddr, (uint8_t*)&entry, sizeof(LogEntry));
 }
 
 void initSectorPointers() {
@@ -63,13 +68,13 @@ void initSectorPointers() {
   }
 
   LogEntry metaEntry;
-  ESP.flashRead(FLASH_LOG_START + (currentSector * FLASH_SECTOR_SIZE), (uint32_t*)&metaEntry, sizeof(LogEntry));
+  ESP.flashRead(FLASH_LOG_START + (currentSector * FLASH_SECTOR_SIZE), (uint8_t*)&metaEntry, sizeof(LogEntry));
 
   if (isMetaEntry(metaEntry)) {
     startSector = metaEntry.timeSec;
   } else {
     uint16_t prevSector = (currentSector + FLASH_NUM_SECTORS - 1) % FLASH_NUM_SECTORS;
-    ESP.flashRead(FLASH_LOG_START + (prevSector * FLASH_SECTOR_SIZE), (uint32_t*)&metaEntry, sizeof(LogEntry));
+    ESP.flashRead(FLASH_LOG_START + (prevSector * FLASH_SECTOR_SIZE), (uint8_t*)&metaEntry, sizeof(LogEntry));
     if (isMetaEntry(metaEntry)) {
       startSector = metaEntry.timeSec;
     } else {
@@ -116,9 +121,14 @@ void initLogging(uint8_t bootId) {
     ESP.wdtFeed();
     uint32_t addr = FLASH_LOG_START + (s * FLASH_SECTOR_SIZE) + (o * sizeof(LogEntry));
     LogEntry entry;
-    ESP.flashRead(addr, (uint32_t*)&entry, sizeof(LogEntry));
+    ESP.flashRead(addr, (uint8_t*)&entry, sizeof(LogEntry));
 
     if (entry.timeSec == 0xFFFFFFFF) break;
+    if (!validLogEntry(entry) && !isMetaEntry(entry)) {
+      o++;
+      if (o >= LOGS_PER_SECTOR) { o = 0; s = (s + 1) % FLASH_NUM_SECTORS; }
+      continue;
+    }
 
     if (!isMetaEntry(entry)) {
       totalLogsCached++;
@@ -232,7 +242,7 @@ bool logPumpData(const PZEMData &data, uint8_t states, unsigned long forceInterv
   }
 
   uint32_t writeAddr = FLASH_LOG_START + (currentSector * FLASH_SECTOR_SIZE) + (currentOffset * sizeof(LogEntry));
-  ESP.flashWrite(writeAddr, (uint32_t*)&entry, sizeof(LogEntry));
+  ESP.flashWrite(writeAddr, (uint8_t*)&entry, sizeof(LogEntry));
 
   lastLoggedPZEM = data;
   lastLoggedStates = states;
@@ -294,7 +304,7 @@ int getLogHex(String& hex, int maxEntries, uint8_t sinceBootId, uint32_t sinceTi
         ESP.wdtFeed();
         uint32_t addr = FLASH_LOG_START + (scanS * FLASH_SECTOR_SIZE) + (scanO * sizeof(LogEntry));
         LogEntry entry;
-        ESP.flashRead(addr, (uint32_t*)&entry, sizeof(LogEntry));
+        ESP.flashRead(addr, (uint8_t*)&entry, sizeof(LogEntry));
         if (entry.timeSec == 0xFFFFFFFF) break;
         if (!isMetaEntry(entry) && entry.bootId == sinceBootId && entry.timeSec == sinceTimeSec) {
           scanO++;
@@ -316,7 +326,7 @@ int getLogHex(String& hex, int maxEntries, uint8_t sinceBootId, uint32_t sinceTi
         ESP.wdtFeed();
         uint32_t addr = FLASH_LOG_START + (s * FLASH_SECTOR_SIZE) + (o * sizeof(LogEntry));
         LogEntry entry;
-        ESP.flashRead(addr, (uint32_t*)&entry, sizeof(LogEntry));
+        ESP.flashRead(addr, (uint8_t*)&entry, sizeof(LogEntry));
         if (entry.timeSec == 0xFFFFFFFF) break;
         if (!isMetaEntry(entry) && entry.bootId == sinceBootId && entry.timeSec == sinceTimeSec) {
           o++;
@@ -331,7 +341,9 @@ int getLogHex(String& hex, int maxEntries, uint8_t sinceBootId, uint32_t sinceTi
     }
   }
 
-  if (targetSector == -1) return 0;
+  if (targetSector == -1) {
+    return 0;
+  }
 
   int currentS = targetSector;
   int currentO = targetOffset;
@@ -341,19 +353,26 @@ int getLogHex(String& hex, int maxEntries, uint8_t sinceBootId, uint32_t sinceTi
 
     uint32_t addr = FLASH_LOG_START + (currentS * FLASH_SECTOR_SIZE) + (currentO * sizeof(LogEntry));
     LogEntry entry;
-    ESP.flashRead(addr, (uint32_t*)&entry, sizeof(LogEntry));
+    ESP.flashRead(addr, (uint8_t*)&entry, sizeof(LogEntry));
 
-    if (entry.timeSec != 0xFFFFFFFF) {
-      if (!isMetaEntry(entry)) {
-        uint8_t* ptr = (uint8_t*)&entry;
-        for (int j = 0; j < sizeof(LogEntry); j++) {
-          if (ptr[j] < 16) hex += "0";
-          hex += String(ptr[j], HEX);
-        }
-        sent++;
+    if (entry.timeSec == 0xFFFFFFFF) break;
+
+    if (!validLogEntry(entry) && !isMetaEntry(entry)) {
+      currentO++;
+      if (currentO >= LOGS_PER_SECTOR) {
+        currentO = 0;
+        currentS = (currentS + 1) % FLASH_NUM_SECTORS;
       }
-    } else {
-      break;
+      continue;
+    }
+
+    if (!isMetaEntry(entry)) {
+      uint8_t* ptr = (uint8_t*)&entry;
+      for (int j = 0; j < sizeof(LogEntry); j++) {
+        if (ptr[j] < 16) hex += "0";
+        hex += String(ptr[j], HEX);
+      }
+      sent++;
     }
 
     currentO++;
@@ -367,13 +386,13 @@ int getLogHex(String& hex, int maxEntries, uint8_t sinceBootId, uint32_t sinceTi
 }
 
 void clearLogs() {
-  startSector = (currentSector + 1) % FLASH_NUM_SECTORS;
-  currentSector = startSector;
+  for (int s = 0; s < FLASH_NUM_SECTORS; s++) {
+    ESP.flashEraseSector((FLASH_LOG_START + (s * FLASH_SECTOR_SIZE)) / FLASH_SECTOR_SIZE);
+    if (s % 8 == 0) ESP.wdtFeed();
+  }
 
-  ESP.flashEraseSector((FLASH_LOG_START + (currentSector * FLASH_SECTOR_SIZE)) / FLASH_SECTOR_SIZE);
-
-  uint16_t sentinelSector = (currentSector + 1) % FLASH_NUM_SECTORS;
-  ESP.flashEraseSector((FLASH_LOG_START + (sentinelSector * FLASH_SECTOR_SIZE)) / FLASH_SECTOR_SIZE);
+  startSector = 0;
+  currentSector = 0;
 
   LogEntry entry;
   entry.timeSec = startSector;
@@ -384,7 +403,7 @@ void clearLogs() {
   entry.states = 0;
   entry.bootId = 0;
   uint32_t addr = FLASH_LOG_START + (currentSector * FLASH_SECTOR_SIZE);
-  ESP.flashWrite(addr, (uint32_t*)&entry, sizeof(LogEntry));
+  ESP.flashWrite(addr, (uint8_t*)&entry, sizeof(LogEntry));
   currentOffset = 1;
 
   lastLoggedPZEM = {0};
@@ -409,7 +428,7 @@ void writeCorrectionLog(uint8_t bootId, uint32_t duration) {
   entry.bootId = bootId;
 
   uint32_t writeAddr = FLASH_LOG_START + (currentSector * FLASH_SECTOR_SIZE) + (currentOffset * sizeof(LogEntry));
-  ESP.flashWrite(writeAddr, (uint32_t*)&entry, sizeof(LogEntry));
+  ESP.flashWrite(writeAddr, (uint8_t*)&entry, sizeof(LogEntry));
 
   currentOffset++;
   if (currentOffset >= LOGS_PER_SECTOR) {
@@ -449,17 +468,17 @@ uint8_t recoverBootIdFromFlash() {
       currentSectorExhausted = true;
       LogEntry meta;
       ESP.flashRead(FLASH_LOG_START + (currentSector * FLASH_SECTOR_SIZE),
-                    (uint32_t*)&meta, sizeof(LogEntry));
+                    (uint8_t*)&meta, sizeof(LogEntry));
       if (isMetaEntry(meta) && meta.bootId == 0) {
-        return 0;
+        return 1;
       }
     }
 
     uint32_t addr = FLASH_LOG_START + (s * FLASH_SECTOR_SIZE) + (o * sizeof(LogEntry));
     LogEntry entry;
-    ESP.flashRead(addr, (uint32_t*)&entry, sizeof(LogEntry));
+    ESP.flashRead(addr, (uint8_t*)&entry, sizeof(LogEntry));
 
-    if (entry.timeSec != 0xFFFFFFFF && !isMetaEntry(entry)) {
+    if (entry.timeSec != 0xFFFFFFFF && !isMetaEntry(entry) && validLogEntry(entry)) {
       return entry.bootId + 1;
     }
 
@@ -471,5 +490,5 @@ uint8_t recoverBootIdFromFlash() {
     }
   }
 
-  return 0;
+  return 1;
 }

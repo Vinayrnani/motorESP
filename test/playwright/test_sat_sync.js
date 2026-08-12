@@ -101,11 +101,11 @@ async function main() {
   // We call the underlying API directly instead of through the UI (which uses confirm())
   const unixNow = Math.floor(Date.now() / 1000);
   try {
-    const resp = await httpGet(`${ESP_URL}/settings/api?action=newBatch&timestamp=${unixNow}`);
-    console.log(`newBatch response: ${resp}`);
+    const resp = await httpGet(`${ESP_URL}/settings/clear`);
+    console.log(`clearLogs response: ${resp}`);
   } catch (e) {
     // ESP will reboot, so this request will fail - that's expected
-    console.log('ESP rebooting after new batch (expected)');
+    console.log('ESP rebooting after flash clear (expected)');
   }
 
   // Wait for ESP to reboot

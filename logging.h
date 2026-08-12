@@ -85,6 +85,7 @@ uint8_t recoverBootIdFromFlash();
 void initLogging(uint8_t bootId);
 bool logPumpData(const PZEMData &data, uint8_t states, unsigned long forceInterval = 0);
 bool isMetaEntry(const LogEntry &entry);
+bool validLogEntry(const LogEntry &entry);
 int getLogHex(String& hex, int maxEntries = 200, uint8_t sinceBootId = 0, uint32_t sinceTimeSec = 0);
 int getTotalLogs();
 void clearLogs();
