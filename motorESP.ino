@@ -769,6 +769,18 @@ void handleStatus() {
     autoRetryIn = String(autoRetryAt > millis() ? (autoRetryAt - millis()) / 1000 : 0);
   }
 
+  unsigned long nowMs = millis();
+  unsigned long minOffLeft = 0;
+  if (lastStopTime != 0 && pumpState != ST_RUNNING && nowMs >= lastStopTime && (nowMs - lastStopTime) < MIN_OFF_TIME) {
+    minOffLeft = (MIN_OFF_TIME - (nowMs - lastStopTime)) / 1000;
+  }
+  unsigned long minRunLeft = 0;
+  if (runStartTime != 0 && (pumpState == ST_RUNNING || pumpState == ST_STARTING) && nowMs >= runStartTime && (nowMs - runStartTime) < MIN_RUN_TIME) {
+    minRunLeft = (MIN_RUN_TIME - (nowMs - runStartTime)) / 1000;
+  }
+  unsigned long voltageLockLeft = 0;
+  if (voltageLockUntil > nowMs) voltageLockLeft = (voltageLockUntil - nowMs) / 1000;
+
   String json = "{\"voltage\":" + String(pzem.voltage) +
                 ",\"current\":" + String(pzem.current) +
                 ",\"power\":" + String(pzem.power) +
@@ -789,6 +801,9 @@ void handleStatus() {
                 ",\"autoRetryIn\":" + autoRetryIn +
                 ",\"voltageStatus\":\"" + voltageStatus + "\"" +
                 ",\"startFailBlock\":" + String(startFailBlockUntil > millis() ? (startFailBlockUntil - millis()) / 1000 : 0) +
+                ",\"minOffLeft\":" + String(minOffLeft) +
+                ",\"minRunLeft\":" + String(minRunLeft) +
+                ",\"voltageLockLeft\":" + String(voltageLockLeft) +
                 ",\"version\":\"" + FIRMWARE_VERSION + "\"" +
                 ",\"uptime\":\"" + uptimeStr + "\"" +
                 ",\"mock\":" + String(useMockPZEM ? 1 : 0) +

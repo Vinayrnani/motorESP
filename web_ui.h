@@ -15,90 +15,93 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 <title>motorESP - Pump Control</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E💧%3C/text%3E%3C/svg%3E">
 <style>
-:root { --blue:#1877f2; --green:#16a34a; --red:#dc2626; --amber:#d97706; --slate:#64748b; --bg:#f1f5f9; }
+:root { --blue:#1c64f2; --green:#0e9f4e; --red:#d92d20; --amber:#d97706; --panel:#eef1f5; }
 * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-body { font-family:system-ui,sans-serif; margin:0; background:var(--bg); color:#0f172a; }
-.container { max-width:560px; margin:0 auto; padding:12px; }
-.header { background:linear-gradient(135deg,var(--blue),#0a5ac2); padding:14px 16px; border-radius:12px; color:#fff; text-align:center; margin-bottom:12px; }
-.header h1 { margin:0; font-size:21px; font-weight:800; letter-spacing:.3px; }
-.header .sub { font-size:12px; opacity:.85; margin-top:2px; }
-.card { background:#fff; border-radius:12px; padding:16px; margin-bottom:12px; box-shadow:0 1px 4px rgba(0,0,0,0.06); }
-.card h3 { margin:0 0 4px; font-size:14px; color:#334155; text-transform:uppercase; letter-spacing:.4px; }
-.card .cardhelp { font-size:12px; color:var(--slate); margin:0 0 10px; }
-.banner { border-radius:10px; padding:10px 12px; font-weight:700; font-size:13px; margin-bottom:10px; text-align:center; }
-.banner-test { background:#fef3c7; border:1px solid #f59e0b; color:#92400e; }
-.banner-warn { background:#fff7ed; border:1px solid var(--amber); color:#9a3412; }
-.banner-info { background:#eff6ff; border:1px solid #93c5fd; color:#1e40af; }
-.banner-danger { background:#fef2f2; border:1px solid #fca5a5; color:#991b1b; }
-.status-hero { text-align:center; padding:4px 0 12px; }
-.status-icon { font-size:44px; line-height:1.1; }
-.status-big { font-size:24px; font-weight:800; margin-top:4px; }
-.status-big.ok { color:var(--green); }
-.status-big.stop { color:#475569; }
-.status-big.warn { color:var(--amber); }
-.status-big.alarm { color:var(--red); }
-.status-plain { font-size:13px; color:#475569; margin-top:6px; line-height:1.45; }
-.stat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
-.stat-card { background:#f8fafc; padding:10px 6px; border-radius:10px; text-align:center; }
-.stat-label { font-size:10px; color:var(--slate); font-weight:700; text-transform:uppercase; }
-.stat-value { font-size:20px; font-weight:800; margin-top:2px; }
-.stat-unit { font-size:10px; color:var(--slate); }
-.volt-pill { display:inline-block; padding:4px 12px; border-radius:12px; font-size:12px; font-weight:800; margin-top:8px; }
-.vp-normal { background:#dcfce7; color:#166534; }
-.vp-warning { background:#fef3c7; color:#92400e; }
-.vp-critical { background:#fee2e2; color:#991b1b; }
-.btn { display:block; width:100%; padding:15px; border:none; border-radius:12px; font-size:17px; font-weight:800; color:#fff; cursor:pointer; margin-bottom:8px; }
-.btn:active { transform:scale(.98); }
-.btn-on { background:var(--green); }
-.btn-off { background:var(--red); }
-.btn-reset { background:#475569; }
-.btn-help { background:#e2e8f0; color:#334155; font-size:14px; padding:12px; }
-.btn-note { font-size:11px; font-weight:600; color:#fff; opacity:.9; margin-top:2px; }
-.btn-off .btn-note { color:#fee2e2; }
-.feed { min-height:20px; font-size:13px; font-weight:700; text-align:center; margin-top:6px; }
+body { font-family:system-ui,sans-serif; margin:0; background:#dfe3e8; color:#1b2430; }
+.container { max-width:620px; margin:0 auto; padding:10px; }
+.header { background:#1c2733; padding:10px 14px; border-radius:8px; color:#fff; display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+.header h1 { margin:0; font-size:16px; font-weight:800; letter-spacing:1px; }
+.header .sub { font-size:11px; opacity:.8; text-align:right; }
+.panel { background:#fff; border:1px solid #c6cdd6; border-radius:8px; padding:10px 12px; margin-bottom:10px; }
+.panel-title { font-size:10px; font-weight:800; color:#55657a; text-transform:uppercase; letter-spacing:1.2px; margin-bottom:8px; }
+.banner { border-radius:6px; padding:7px 10px; font-weight:700; font-size:12px; margin-bottom:8px; text-align:center; }
+.banner-test { background:#fff7e0; border:1px solid #f5c518; color:#7a5b00; }
+.banner-warn { background:#fff3e6; border:1px solid var(--amber); color:#9a5b00; }
+.banner-info { background:#e8f1fe; border:1px solid #8db7f7; color:#1c4d9c; }
+.banner-danger { background:#fdeaea; border:1px solid #f5a3a3; color:#991b1b; }
+.status-line { display:flex; align-items:center; gap:8px; padding:2px 0 8px; }
+.status-dot { width:12px; height:12px; border-radius:50%; background:#8b97a8; flex-shrink:0; }
+.dot-ok { background:var(--green); box-shadow:0 0 0 3px rgba(14,159,78,.25); }
+.dot-stop { background:#8b97a8; }
+.dot-warn { background:var(--amber); box-shadow:0 0 0 3px rgba(217,119,6,.25); }
+.dot-alarm { background:var(--red); box-shadow:0 0 0 3px rgba(217,45,32,.25); }
+.status-big { font-size:20px; font-weight:800; letter-spacing:.5px; }
+.status-big.ok { color:var(--green); } .status-big.stop { color:#55657a; }
+.status-big.warn { color:var(--amber); } .status-big.alarm { color:var(--red); }
+.status-plain { font-size:12px; color:#45536a; line-height:1.4; }
+.stat-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+.stat-card { background:var(--panel); border:1px solid #d3d9e1; border-radius:6px; padding:8px 4px; text-align:center; }
+.stat-label { font-size:9px; color:#55657a; font-weight:800; text-transform:uppercase; letter-spacing:1px; }
+.stat-value { font-size:19px; font-weight:800; font-variant-numeric:tabular-nums; margin-top:1px; }
+.volt-pill { display:inline-block; padding:3px 10px; border-radius:4px; font-size:11px; font-weight:800; letter-spacing:.5px; }
+.vp-normal { background:#e3f6e9; color:#0e7a3f; }
+.vp-warning { background:#fff3e6; color:#9a5b00; }
+.vp-critical { background:#fdeaea; color:#991b1b; }
+.seg { display:flex; border:1px solid #c6cdd6; border-radius:6px; overflow:hidden; }
+.seg button { flex:1; padding:11px 4px; border:none; background:#fff; font-size:12px; font-weight:800; color:#45536a; cursor:pointer; letter-spacing:.5px; }
+.seg button + button { border-left:1px solid #c6cdd6; }
+.seg button.active { background:var(--blue); color:#fff; }
+.btn-row { display:flex; gap:6px; }
+.btn { flex:1; padding:13px 4px; border:none; border-radius:6px; font-size:13px; font-weight:800; color:#fff; cursor:pointer; letter-spacing:.4px; }
+.btn:active { filter:brightness(.9); }
+.btn:disabled { opacity:.4; cursor:not-allowed; filter:grayscale(.5); }
+.btn .cnt { display:block; font-size:10px; font-weight:700; opacity:.85; margin-top:1px; letter-spacing:.2px; }
+.btn:not(:disabled) .cnt { display:none; }
+.btn-on { background:var(--green); } .btn-off { background:var(--red); } .btn-reset { background:#55657a; }
+.feed { min-height:16px; font-size:12px; font-weight:700; text-align:center; margin-top:5px; }
 .feed.good { color:var(--green); } .feed.bad { color:var(--red); } .feed.info { color:var(--blue); }
-.mode-row { display:flex; gap:8px; }
-.mode-btn { flex:1; padding:11px 6px 9px; border:2px solid #e2e8f0; background:#fff; border-radius:10px; cursor:pointer; text-align:center; }
-.mode-btn .m-title { font-size:14px; font-weight:800; color:#334155; display:block; }
-.mode-btn .m-desc { font-size:10px; color:var(--slate); display:block; margin-top:2px; line-height:1.3; }
-.mode-btn.active { border-color:var(--blue); background:#eff6ff; }
-.mode-btn.active .m-title { color:var(--blue); }
-.detail-row { display:flex; justify-content:space-between; font-size:13px; padding:5px 0; border-bottom:1px dashed #e2e8f0; }
+.detail-row { display:flex; justify-content:space-between; font-size:12px; padding:4px 0; border-bottom:1px dashed #dde3ea; }
 .detail-row:last-child { border-bottom:none; }
-.detail-row b { font-weight:700; }
-details { background:#f8fafc; border-radius:10px; padding:10px 12px; margin-top:8px; }
-summary { font-size:13px; font-weight:800; color:#334155; cursor:pointer; }
-details p, details li { font-size:12.5px; color:#475569; line-height:1.5; margin:6px 0; }
-details ul { margin:6px 0; padding-left:18px; }
-.nav { display:flex; gap:8px; }
-.nav a { flex:1; text-align:center; padding:11px 4px; background:var(--blue); border-radius:10px; text-decoration:none; color:#fff; font-weight:800; font-size:13px; }
+.detail-row b { font-weight:700; font-variant-numeric:tabular-nums; }
+.nav { display:flex; gap:6px; }
+.nav a { flex:1; text-align:center; padding:10px 4px; background:#1c2733; border-radius:6px; text-decoration:none; color:#fff; font-weight:800; font-size:12px; letter-spacing:.4px; }
+.sheet-mask { position:fixed; inset:0; background:rgba(15,23,42,.45); opacity:0; pointer-events:none; transition:opacity .15s; z-index:40; }
+.sheet-mask.open { opacity:1; pointer-events:auto; }
+.sheet { position:fixed; left:0; right:0; bottom:0; background:#fff; border-radius:12px 12px 0 0; padding:14px 14px 18px; transform:translateY(110%); transition:transform .18s; z-index:50; box-shadow:0 -4px 20px rgba(0,0,0,.25); }
+.sheet.open { transform:translateY(0); }
+.sheet-title { font-size:10px; font-weight:800; color:#55657a; text-transform:uppercase; letter-spacing:1.2px; text-align:center; margin-bottom:10px; }
+.sheet-btn { display:block; width:100%; padding:14px; margin-bottom:8px; border:1px solid #c6cdd6; border-radius:8px; background:#fff; font-size:14px; font-weight:800; color:#1b2430; cursor:pointer; letter-spacing:.4px; }
+.sheet-btn:active { background:var(--panel); }
+.sheet-close { background:#1c2733; color:#fff; border-color:#1c2733; }
+.hint { font-size:10px; color:#94a3b8; text-align:center; margin-top:2px; letter-spacing:.3px; }
 </style>
 </head>
 <body>
 <div class="container">
   <div class="header">
-    <h1>💧 Pump Controller</h1>
-    <div class="sub" id="subLine">motorESP · connecting…</div>
+    <h1>💧 PUMP CTRL</h1>
+    <div class="sub" id="subLine">connecting…</div>
   </div>
 
-  <div id="testBanner" class="banner banner-test" style="display:none">🧪 TEST MODE — readings are simulated. No real pump data.</div>
+  <div id="testBanner" class="banner banner-test" style="display:none">🧪 TEST MODE — simulated readings</div>
 
-  <div class="card">
-    <div class="status-hero">
-      <div class="status-icon" id="statusIcon">⚪</div>
+  <div class="panel">
+    <div class="status-line">
+      <div class="status-dot stop" id="statusDot"></div>
       <div class="status-big stop" id="statusBig">OFF</div>
-      <div class="volt-pill vp-normal" id="voltPill">VOLTAGE OK</div>
-      <div class="status-plain" id="statusPlain">Waiting for status…</div>
+      <span class="volt-pill vp-normal" id="voltPill">VOLTAGE OK</span>
     </div>
+    <div class="status-plain" id="statusPlain">Waiting for status…</div>
+    <div style="height:8px"></div>
     <div class="stat-grid">
-<div class="stat-card"><div class="stat-label">Voltage</div><div class="stat-value"><span id="stVolt">--</span></div></div>
+      <div class="stat-card"><div class="stat-label">Voltage</div><div class="stat-value"><span id="stVolt">--</span></div></div>
       <div class="stat-card"><div class="stat-label">Current</div><div class="stat-value"><span id="stCur">--</span></div></div>
       <div class="stat-card"><div class="stat-label">Power</div><div class="stat-value"><span id="stPow">--</span></div></div>
     </div>
   </div>
 
-  <div class="card" id="reasonCard" style="display:none">
-    <h3>What is happening</h3>
+  <div class="panel" id="reasonPanel" style="display:none">
+    <div class="panel-title">Status Detail</div>
     <div class="banner banner-info" id="reasonBanner"></div>
     <div class="detail-row"><span>Automatic restart</span><b id="detRetry">—</b></div>
     <div class="detail-row"><span>Retries used</span><b id="detRetriesUsed">—</b></div>
@@ -106,83 +109,50 @@ details ul { margin:6px 0; padding-left:18px; }
     <div class="detail-row"><span>Start blocked until</span><b id="detBlocked">—</b></div>
   </div>
 
-  <div class="card">
-    <h3>Operating Mode</h3>
-    <p class="cardhelp">How the pump is controlled. Tap one to change it right away.</p>
-    <div class="mode-row">
-      <button class="mode-btn" data-mode="0"><span class="m-title">⏹ OFF</span><span class="m-desc">Pump can't start</span></button>
-      <button class="mode-btn" data-mode="1"><span class="m-title">👆 MANUAL</span><span class="m-desc">You start &amp; stop</span></button>
-      <button class="mode-btn" data-mode="2"><span class="m-title">🤖 AUTO</span><span class="m-desc">Automatic schedule</span></button>
+  <div class="panel">
+    <div class="panel-title">Mode</div>
+    <div class="seg">
+      <button data-mode="0">OFF</button>
+      <button data-mode="1">MANUAL</button>
+      <button data-mode="2">AUTO</button>
     </div>
   </div>
 
-  <div class="card">
-    <h3>Pump Control</h3>
-    <p class="cardhelp">Start and stop the pump. If safety stops it, you'll see the reason above.</p>
-    <button class="btn btn-on" id="btnStart">▶ START PUMP<span class="btn-note">Sends start pulse to the motor contactor</span></button>
-    <button class="btn btn-off" id="btnStop">■ STOP PUMP<span class="btn-note">Sends stop pulse — motor contactor releases</span></button>
-    <button class="btn btn-reset" id="btnReset">↺ RESET SAFETY ALARM<span class="btn-note">Enable this only after the fault is fixed</span></button>
+  <div class="panel">
+    <div class="panel-title">Control</div>
+    <div class="btn-row">
+      <button class="btn btn-on" id="btnStart">START<span class="cnt"></span></button>
+      <button class="btn btn-off" id="btnStop">STOP<span class="cnt"></span></button>
+      <button class="btn btn-reset" id="btnReset">RESET<span class="cnt"></span></button>
+    </div>
     <div class="feed" id="msg"></div>
   </div>
 
-  <div class="card">
-    <h3>Help &amp; Explanation</h3>
-    <details>
-      <summary>What do the statuses mean?</summary>
-      <ul>
-        <li><b>OFF / STOPPED</b> — The pump is not running. Press <b>START PUMP</b>.</li>
-        <li><b>RUNNING</b> — The pump is working. Current above ~2&nbsp;A means the motor switched on.</li>
-        <li><b>SAFETY STOP</b> — The controller stopped the pump because it detected a problem. Read the reason in
-            “What is happening” and press <b>RESET SAFETY ALARM</b> after fixing it.</li>
-        <li><b>POWER RESTORED</b> — After a power cut the controller waits for you to press START. This is a safety feature.</li>
-      </ul>
-    </details>
-    <details>
-      <summary>What does each mode do?</summary>
-      <ul>
-        <li><b>OFF</b> — The pump will never start. Use when the pump must stay off (e.g. maintenance).</li>
-        <li><b>MANUAL</b> — You decide. Press START or STOP whenever you want.</li>
-        <li><b>AUTO</b> — The controller starts and stops the pump on a schedule (coming soon).</li>
-      </ul>
-    </details>
-    <details>
-      <summary>Why won't the pump start?</summary>
-      <p>Most common reasons:</p>
-      <ul>
-        <li><b>Too soon since it last stopped</b> — the pump waits (default 60&nbsp;s) before it can restart. This protects the motor.</li>
-        <li><b>Voltage too high</b> — the controller refuses to start while the mains voltage is dangerously high.</li>
-        <li><b>A safety alarm is active</b> — press RESET after fixing the cause.</li>
-        <li><b>Test mode left on</b> — a simulated reading may be blocking the start. Turn off Test mode in Settings.</li>
-      </ul>
-    </details>
-    <details>
-      <summary>What is “Voltage status”?</summary>
-      <ul>
-        <li><b>VOLTAGE OK</b> — normal mains voltage, usually 200–250&nbsp;V.</li>
-        <li><b>WARNING</b> — voltage is high. Watch for flicker or overheating.</li>
-        <li><b>CRITICAL</b> — voltage is dangerously high; the pump will not be allowed to start.</li>
-      </ul>
-    </details>
-  </div>
-
   <div class="nav">
-    <a href="/dashboard">📊 Dashboard</a>
-    <a href="/settings">⚙️ Settings</a>
-    <a href="/data">📋 Log</a>
+    <a href="/dashboard">DASHBOARD</a>
+    <a href="/settings">SETTINGS</a>
+    <a href="/data">LOG</a>
   </div>
+</div>
+
+<div class="sheet-mask" id="sheetMask"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-title">QUICK ACTIONS</div>
+  <button class="sheet-btn" id="qTest">TEST MODE</button>
+  <button class="sheet-btn" id="qErase">ERASE LOG</button>
+  <button class="sheet-btn" id="qReboot">REBOOT</button>
+  <button class="sheet-btn sheet-close" id="qClose">CLOSE</button>
 </div>
 
 <script>
 const $ = id => document.getElementById(id);
-let mode = 1;
 const TRIP_PLAIN = {2:"Overload — the pump drew too much current",4:"No Water — the pump ran dry",
   8:"Voltage too high",16:"Voltage too low",64:"Power sensor fault",128:"Pump did not start"};
 
 function setModeBtn(m) {
-  mode = m;
-  document.querySelectorAll('.mode-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.mode) === m));
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('active', parseInt(b.dataset.mode) === m));
 }
-document.querySelectorAll('.mode-btn').forEach(b => b.addEventListener('click', () => {
+document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
   setModeBtn(parseInt(b.dataset.mode));
   fetch('/control?action=mode&mode=' + b.dataset.mode).then(r => r.text()).then(m => feed(m));
 }));
@@ -197,6 +167,25 @@ $('btnStart').onclick = () => doAct('start');
 $('btnStop').onclick = () => doAct('stop');
 $('btnReset').onclick = () => doAct('reset');
 
+const sheet = $('sheet'), mask = $('sheetMask');
+function openSheet() { sheet.classList.add('open'); mask.classList.add('open'); }
+function closeSheet() { sheet.classList.remove('open'); mask.classList.remove('open'); }
+let pressT = null;
+document.querySelector('.header').addEventListener('pointerdown', () => { pressT = setTimeout(openSheet, 600); });
+document.querySelector('.header').addEventListener('pointerup', () => clearTimeout(pressT));
+document.querySelector('.header').addEventListener('pointerleave', () => clearTimeout(pressT));
+mask.addEventListener('click', closeSheet);
+$('qClose').onclick = closeSheet;
+$('qReboot').onclick = () => { closeSheet(); fetch('/reboot').then(() => feed('Rebooting…', 'info')); };
+$('qErase').onclick = () => { if (confirm('Erase all recorded history and restart?')) { closeSheet(); fetch('/settings/clear').then(() => feed('Erasing… device restarts', 'info')); } };
+$('qTest').onclick = async () => {
+  const s = await (await fetch('/status')).json();
+  const next = s.mock ? 0 : 1;
+  closeSheet();
+  feed(next ? 'Test mode ON — simulated readings' : 'Test mode OFF', 'info');
+  fetch('/settings/api?mock=' + next, { method:'POST' });
+};
+
 function fmtCountdown(sec) {
   if (!sec || sec <= 0) return 'not scheduled';
   const m = Math.floor(sec / 60), s = sec % 60;
@@ -206,7 +195,7 @@ function fmtCountdown(sec) {
 async function refresh() {
   try {
     const s = await (await fetch('/status')).json();
-    $('subLine').textContent = 'motorESP · ' + s.version + (s.mock ? ' · TEST MODE' : ' · ' + (s.rssi > -80 ? 'signal ok' : 'weak signal'));
+    $('subLine').textContent = 'v' + s.version + (s.mock ? ' · TEST MODE' : ' · ' + (s.rssi > -80 ? 'ok' : 'weak'));
     $('testBanner').style.display = s.mock ? 'block' : 'none';
     $('stVolt').textContent = s.voltage.toFixed(0) + ' V';
     $('stCur').textContent = s.current.toFixed(1) + ' A';
@@ -214,32 +203,30 @@ async function refresh() {
 
     const pill = $('voltPill');
     pill.className = 'volt-pill ' + ({NORMAL:'vp-normal',WARNING:'vp-warning',CRITICAL:'vp-critical'}[s.voltageStatus]||'vp-normal');
-    pill.textContent = {NORMAL:'VOLTAGE OK',WARNING:'VOLTAGE HIGH — WARNING',CRITICAL:'VOLTAGE CRITICAL — START BLOCKED'}[s.voltageStatus] || s.voltageStatus;
+    pill.textContent = {NORMAL:'VOLTAGE OK',WARNING:'VOLTAGE HIGH',CRITICAL:'VOLTAGE CRITICAL'}[s.voltageStatus] || s.voltageStatus;
 
-    const big = $('statusBig'), icon = $('statusIcon'), plain = $('statusPlain');
+    const big = $('statusBig'), dot = $('statusDot'), plain = $('statusPlain');
     if (s.pumpState === 'RUNNING') {
-      big.className = 'status-big ok'; big.textContent = 'RUNNING'; icon.textContent = '💧';
+      big.className = 'status-big ok'; big.textContent = 'RUNNING'; dot.className = 'status-dot dot-ok';
       plain.textContent = 'Pump is running normally.';
     } else if (s.pumpState === 'TRIPPED') {
-      big.className = 'status-big alarm'; big.textContent = 'SAFETY STOP'; icon.textContent = '⛔';
+      big.className = 'status-big alarm'; big.textContent = 'SAFETY STOP'; dot.className = 'status-dot dot-alarm';
       const names = (s.tripNames || '').split('|').filter(Boolean);
       const lines = names.map(n => TRIP_PLAIN[n] || n).filter(Boolean);
       plain.textContent = (s.permanentLockout ?
         'PERMANENT LOCKOUT — a fault repeated many times. Press RESET only after fixing the cause.' :
         'The controller stopped the pump for safety: ' + (lines.join('; ') || 'a fault')) + '.';
     } else if (s.powerRestored) {
-      big.className = 'status-big warn'; big.textContent = 'POWER RESTORED'; icon.textContent = '🔌';
+      big.className = 'status-big warn'; big.textContent = 'POWER RESTORED'; dot.className = 'status-dot dot-warn';
       plain.textContent = 'Power came back. Press START PUMP to run the pump again (safety feature).';
     } else {
-      big.className = 'status-big stop'; big.textContent = 'STOPPED'; icon.textContent = '💤';
+      big.className = 'status-big stop'; big.textContent = 'STOPPED'; dot.className = 'status-dot dot-stop';
       plain.textContent = 'Pump is stopped. Press START PUMP when you need water.';
     }
 
-    const rc = $('reasonCard');
-    function intFromName(n) { return parseInt(n, 10) || 0; }
-    const tripBits = s.trips || 0;
-    if (tripBits || s.permanentLockout || s.autoRetryIn > 0) {
-      rc.style.display = 'block';
+    const rp = $('reasonPanel');
+    if (s.trips || s.permanentLockout || s.autoRetryIn > 0) {
+      rp.style.display = 'block';
       const names = (s.tripNames || 'NONE').split('|').filter(n => n !== 'NONE');
       $('reasonBanner').className = 'banner ' + (s.permanentLockout ? 'banner-danger' : 'banner-warn');
       $('reasonBanner').textContent = names.length
@@ -250,17 +237,63 @@ async function refresh() {
       $('detFast').textContent = s.fastFaultCount + ' of ' + s.maxFastFaults;
       $('detBlocked').textContent = s.startFailBlock > 0 ? fmtCountdown(s.startFailBlock) + ' (start-fail block)' : (s.powerRestored ? 'until manual start' : '—');
     } else if (s.powerRestored) {
-      rc.style.display = 'block';
+      rp.style.display = 'block';
       $('reasonBanner').className = 'banner banner-info';
       $('reasonBanner').textContent = 'Power restored — the controller waits for you to press START PUMP.';
       $('detRetry').textContent = '—'; $('detRetriesUsed').textContent = '—'; $('detFast').textContent = '—';
       $('detBlocked').textContent = 'until manual start';
     } else {
-      rc.style.display = 'none';
+      rp.style.display = 'none';
     }
 
     setModeBtn(s.pumpMode);
+    refreshButtons(s);
   } catch(e) {}
+}
+
+function setBtn(btn, disabled, label, cnt) {
+  btn.disabled = !!disabled;
+  btn.firstChild.textContent = label;
+  const c = btn.querySelector('.cnt');
+  c.textContent = cnt || '';
+}
+
+function fmtSec(sec) {
+  if (!sec || sec <= 0) return '';
+  if (sec >= 60) return Math.floor(sec/60) + 'm ' + (sec%60) + 's';
+  return sec + 's';
+}
+
+function refreshButtons(s) {
+  const running = s.pumpState === 'RUNNING';
+  const starting = s.pumpState === 'STARTING';
+  const stopping = s.pumpState === 'STOPPING';
+  const tripped = s.pumpState === 'TRIPPED';
+
+  let startMsg = '', startCnt = '';
+  if (tripped || s.trips || s.permanentLockout) { startMsg = 'RESET FIRST'; }
+  else if (starting) { startMsg = 'STARTING'; }
+  else if (stopping) { startMsg = 'STOPPING'; }
+  else if (running) { startMsg = 'RUNNING'; }
+  else if (s.minOffLeft > 0) { startMsg = 'START BLOCKED'; startCnt = fmtSec(s.minOffLeft); }
+  else if (s.startFailBlock > 0) { startMsg = 'RETRY BLOCKED'; startCnt = fmtSec(s.startFailBlock); }
+  else if (s.voltageLockLeft > 0) { startMsg = 'VOLTAGE LOCK'; startCnt = fmtSec(s.voltageLockLeft); }
+  else if (s.voltageStatus === 'CRITICAL') { startMsg = 'VOLTAGE HIGH'; }
+  else if (!s.pzemValid && !s.mock) { startMsg = 'NO METER'; }
+  setBtn($('btnStart'), startMsg !== '', startMsg || 'START', startCnt);
+
+  let stopMsg = '', stopCnt = '';
+  if (stopping) { stopMsg = 'STOPPING'; }
+  else if (running) {
+    if (s.minRunLeft > 0) { stopMsg = 'STOP BLOCKED'; stopCnt = fmtSec(s.minRunLeft); }
+    else stopMsg = 'STOP';
+  }
+  else if (starting) { stopMsg = 'STOPPING'; }
+  else { stopMsg = 'STOPPED'; }
+  setBtn($('btnStop'), stopMsg !== 'STOP', stopMsg === 'STOP' ? 'STOP' : stopMsg, stopCnt);
+
+  const needReset = tripped || s.trips || s.permanentLockout;
+  setBtn($('btnReset'), !needReset, 'RESET', '');
 }
 setInterval(refresh, 3000);
 refresh();
@@ -269,9 +302,6 @@ refresh();
 </html>
 )rawliteral";
 
-// ============================================
-// DASHBOARD PAGE (/dashboard)
-// ============================================
 const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
@@ -308,7 +338,6 @@ body { background:#f1f5f9; }
 .refresh-control { display:flex; align-items:center; gap:8px; font-size:12px; color:rgba(255,255,255,0.9); font-weight:600; justify-content:center; margin-top:8px; }
 .hist { font-size:12px; color:#64748b; }
 .card h6 { margin:0 0 4px; font-weight:800; color:#334155; }
-.card .capexpl { font-size:11.5px; color:#64748b; margin-bottom:8px; }
 details { background:#f8fafc; border-radius:10px; padding:10px 12px; }
 summary { font-size:13px; font-weight:800; color:#334155; cursor:pointer; }
 details li { font-size:12px; color:#475569; line-height:1.5; }
@@ -336,8 +365,7 @@ details li { font-size:12px; color:#475569; line-height:1.5; }
       </div>
       <span class="hist">Uptime <b id="uptime">--</b></span>
     </div>
-    <p class="capexpl" id="stateExpl">Waiting for live data…</p>
-    <div class="numerics">
+        <div class="numerics">
       <div class="num-card"><div class="num-label">Voltage</div><div class="num-value"><span id="nVolt">--</span></div></div>
       <div class="num-card"><div class="num-label">Current</div><div class="num-value"><span id="nCur">--</span></div></div>
       <div class="num-card"><div class="num-label">Power</div><div class="num-value"><span id="nPow">--</span></div></div>
@@ -347,23 +375,10 @@ details li { font-size:12px; color:#475569; line-height:1.5; }
     </div>
   </div>
 
-  <div class="card"><h6>⚡ Power used (W)</h6><p class="capexpl">How hard the pump is working right now. A running motor draws its normal wattage; a big jump may mean overload.</p><div class="chart-box"><canvas id="chartPower"></canvas></div></div>
-  <div class="card"><h6>⚡ Mains voltage (V)</h6><p class="capexpl">Electricity supply voltage. Normal is roughly 200–250&nbsp;V. Below 190&nbsp;V or above 250&nbsp;V triggers safety.</p><div class="chart-box"><canvas id="chartVoltage"></canvas></div></div>
-  <div class="card"><h6>⚡ Pump current (A)</h6><p class="capexpl">Electricity flowing into the pump. Near zero while stopped; normal running value depends on the motor (e.g. ~9.6&nbsp;A for a 1.5&nbsp;HP pump).</p><div class="chart-box"><canvas id="chartCurrent"></canvas></div></div>
+  <div class="card"><h6>⚡ Power used (W)</h6><div class="chart-box"><canvas id="chartPower"></canvas></div></div>
+  <div class="card"><h6>⚡ Mains voltage (V)</h6><div class="chart-box"><canvas id="chartVoltage"></canvas></div></div>
+  <div class="card"><h6>⚡ Pump current (A)</h6><div class="chart-box"><canvas id="chartCurrent"></canvas></div></div>
 
-  <div class="card">
-    <details>
-      <summary>How to read this page</summary>
-      <ul>
-        <li><b>Voltage</b> — mains supply level. High voltage damages motors, so the controller watches it closely.</li>
-        <li><b>Current</b> — the pump motor's draw. If it exceeds the overload limit, safety stops the pump.</li>
-        <li><b>Power</b> — volts × amps in real time. Charts only record while the pump runs or after a fault.</li>
-        <li><b>Energy Used</b> — total electricity since the meter last started. Use it to track pumping cost.</li>
-        <li><b>Frequency</b> — mains frequency, normally 50&nbsp;Hz. Useful to notice unstable supply.</li>
-        <li><b>Power Factor</b> — how efficiently the pump uses electricity (0.5–1.0). Lower values are less efficient.</li>
-      </ul>
-    </details>
-  </div>
 
   <div class="nav d-flex gap-2">
     <a href="/" class="btn btn-primary btn-sm">🏠 Control</a>
@@ -487,7 +502,7 @@ details p { font-size:12px; color:#475569; line-height:1.5; margin:6px 0 0; }
 
   <div class="card" id="testCard">
     <h3>🧪 Test Mode</h3>
-    <p class="cardhelp">For electricians &amp; testing WITHOUT the power meter connected. It feeds fake readings so you can check protections. <b>Turn it off for normal use.</b></p>
+    <p class="cardhelp">Test protections without the real power meter. Turn OFF for normal use.</p>
     <div class="field">
       <label><input type="checkbox" id="cMock" style="width:auto;height:auto;transform:scale(1.3);margin-right:8px;vertical-align:middle;"> Use test readings</label>
     </div>
@@ -503,15 +518,10 @@ details p { font-size:12px; color:#475569; line-height:1.5; margin:6px 0 0; }
     </div>
   </div>
 
-  <details><summary>⚠️ Please read before changing anything</summary>
-    <p>These settings protect your pump motor from damage. The default values are safe for a typical
-      1.5&nbsp;HP (1.1&nbsp;kW) submersible pump drawing ~9.6&nbsp;A. If you are unsure, leave everything
-      as it is. Wrong values can prevent the pump from running or let it run without protection.</p>
-  </details>
 
   <div class="card">
     <h3>🛡 Overload Protection</h3>
-    <p class="cardhelp">Stops the pump when the motor draws too much electricity — this prevents motor burn-out.</p>
+    <p class="cardhelp">Stops the pump when the motor draws too much current.</p>
     <div class="field">
       <label for="ocRunning">Normal current limit (A)</label>
       <p class="help">Highest current the pump draws in normal operation. If current stays above this for the delay time below, the pump stops.</p>
@@ -531,7 +541,7 @@ details p { font-size:12px; color:#475569; line-height:1.5; margin:6px 0 0; }
 
   <div class="card">
     <h3>💧 No-Water Protection (Dry Run)</h3>
-    <p class="cardhelp">Running without water damages a pump quickly. This stops it when it draws too little power for too long.</p>
+    <p class="cardhelp">Stops the pump when it runs without water.</p>
     <div class="field">
       <label for="dryRunCurrent">No-water current limit (A)</label>
       <p class="help">Current while the pump runs dry is usually well below normal. Below this limit counts as “no water”.</p>
@@ -556,7 +566,7 @@ details p { font-size:12px; color:#475569; line-height:1.5; margin:6px 0 0; }
 
   <div class="card">
     <h3>⚡ Voltage Protection</h3>
-    <p class="cardhelp">High or low mains voltage is dangerous for the motor. The controller watches and stops the pump.</p>
+    <p class="cardhelp">Stops the pump on dangerous mains voltage.</p>
     <div class="field">
       <label for="voltOver">High voltage stop (V)</label>
       <p class="help">If voltage stays above this while running, the pump stops after the delay below.</p>
@@ -591,7 +601,7 @@ details p { font-size:12px; color:#475569; line-height:1.5; margin:6px 0 0; }
 
   <div class="card">
     <h3>🔌 Starting &amp; Stopping</h3>
-    <p class="cardhelp">When the controller considers the pump “started”, and how long it protects the motor between actions.</p>
+    <p class="cardhelp">When a start is confirmed, and minimum run/off times.</p>
     <div class="field">
       <label for="startSuccessCurrent">Start success current (A)</label>
       <p class="help">If current rises above this shortly after the start pulse, the pump has really started.</p>
@@ -621,7 +631,7 @@ details p { font-size:12px; color:#475569; line-height:1.5; margin:6px 0 0; }
 
   <div class="card">
     <h3>🔁 Automatic Restart After a Fault</h3>
-    <p class="cardhelp">Choose whether the pump tries to restart by itself after a safety trip — or waits for you. If a fault repeats 3 times quickly, the pump locks permanently and only a manual reset helps.</p>
+    <p class="cardhelp">Auto-restart after a safety trip. 3 quick repeats = permanent lockout.</p>
     <div class="field">
       <label for="autoRetryDelay">Wait before retry (s)</label>
       <p class="help">How long after a trip before an automatic retry happens (e.g. 300&nbsp;s = 5 minutes).</p>
@@ -654,7 +664,7 @@ details p { font-size:12px; color:#475569; line-height:1.5; margin:6px 0 0; }
 
   <div class="card">
     <h3>📊 Recording &amp; Polling</h3>
-    <p class="cardhelp">How often the device saves data to its memory and checks the meter. Smaller numbers = more detail, slightly more wear.</p>
+    <p class="cardhelp">How often data is saved and the meter is read.</p>
     <div class="field">
       <label for="logIntervalRunning">Save every (s) — while running</label>
       <input type="number" id="logIntervalRunning" min="5" max="60">
@@ -790,8 +800,7 @@ details li { font-size:12px; color:#475569; line-height:1.5; }
 
   <div class="card">
     <h3>Recorded readings</h3>
-    <p class="cardhelp">Every row is one automatic measurement. Older rows appear as you press <b>LOAD MORE</b>.
-       The log survives power cuts (stored in the device's flash memory) and holds ~95,000 entries.</p>
+    <p class="cardhelp">One row per automatic measurement. Newest first, LOAD MORE for older.</p>
     <div class="summary" id="summary">Loading…</div>
     <table>
       <thead><tr><th>Session</th><th>Time (s)</th><th>Voltage (V)</th><th>Current (A)</th><th>Used (Wh)</th><th>Power Factor</th><th>Status</th></tr></thead>
@@ -808,21 +817,6 @@ details li { font-size:12px; color:#475569; line-height:1.5; }
     </div>
   </div>
 
-  <div class="card">
-    <details>
-      <summary>What do the status words mean?</summary>
-      <ul>
-        <li><b>RUNNING</b> — pump on and drawing current.</li>
-        <li><b>OVERLOAD</b> — stopped by the overload protection (too much current).</li>
-        <li><b>NO WATER</b> — stopped by dry-run protection (pump ran without water).</li>
-        <li><b>HIGH VOLTAGE</b> / <b>LOW VOLTAGE</b> — stopped because mains voltage was outside safe range.</li>
-        <li><b>PZEM FAULT</b> — the power meter couldn't be read; pump stopped as a safety measure.</li>
-        <li><b>FAILED START</b> — the start pulse was sent but the motor never drew current.</li>
-        <li><b>AUTO</b> — the device was in automatic mode at that moment.</li>
-        <li><b>OFF</b> — pump stopped, no fault.</li>
-      </ul>
-    </details>
-  </div>
 
   <div class="nav">
     <a href="/">🏠 Control</a>
