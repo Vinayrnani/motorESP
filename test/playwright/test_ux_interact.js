@@ -10,6 +10,10 @@ const ok = (name, cond, extra = '') => { console.log((cond ? 'PASS' : 'FAIL') + 
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
 
+  // seed mock meter data (bench has no real PZEM; 0A keeps pump OFF, 235V = VOLTAGE OK)
+  await page.request.post(BASE + '/settings/api?mock=1&mockVoltage=235&mockCurrent=0&mockPower=0');
+  await page.waitForTimeout(1500);
+
   // ---- Control: read-only checks first (no pump state changes)
   await page.goto(BASE + '/', { timeout: 30000, waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3800);
@@ -21,7 +25,7 @@ const ok = (name, cond, extra = '') => { console.log((cond ? 'PASS' : 'FAIL') + 
   ok('power single unit', /^\d+(\.\d+)? (W|kW)$/.test(powTx), powTx);
 
   // mode badges: 3 candidates exist
-  const badges = await page.evaluate(() => [...document.querySelectorAll('.mode-btn')].map(b => ({ m: b.dataset.mode, active: b.classList.contains('active') })));
+  const badges = await page.evaluate(() => [...document.querySelectorAll('.seg button')].map(b => ({ m: b.dataset.mode, active: b.classList.contains('active') })));
   ok('exactly one mode badge active', badges.filter(b => b.active).length === 1, JSON.stringify(badges));
 
   // ---- Dashboard read-only
@@ -40,7 +44,11 @@ const ok = (name, cond, extra = '') => { console.log((cond ? 'PASS' : 'FAIL') + 
   // ---- Settings: save + restore
   await page.goto(BASE + '/settings', { timeout: 30000 });
   await page.waitForTimeout(3000);
-  const ocVal = await page.inputValue('#ocRunning');
+  let ocVal = '';
+  for (let i = 0; i < 8 && !/^1[0-9](\.[05])?$|^50$/.test(ocVal); i++) {
+    ocVal = await page.inputValue('#ocRunning'); // retry: initial /settings/api fetch may 502 on flaky tunnel
+    if (!/^1[0-9](\.[05])?$|^50$/.test(ocVal)) await page.waitForTimeout(2000);
+  }
   ok('settings loaded', /^1[0-9](\.[05])?$|^50$/.test(ocVal), 'ocRunning=' + ocVal);
   await page.fill('#ocRunning', '13');
   await page.click('#btnSave');

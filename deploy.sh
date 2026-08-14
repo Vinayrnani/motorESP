@@ -3,7 +3,7 @@ set -e
 
 echo "Compiling firmware..."
 mkdir -p build
-arduino-cli compile -b esp8266:esp8266:nodemcu -j 0 --build-path build/.cache --output-dir build motorESP.ino
+./bin/arduino-cli compile -b esp8266:esp8266:nodemcu -j 0 --build-path build/.cache --output-dir build motorESP.ino
 
 echo "Copying firmware to firmware.bin..."
 cp build/motorESP.ino.bin firmware.bin

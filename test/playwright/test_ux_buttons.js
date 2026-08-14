@@ -42,10 +42,16 @@ const waitStatus = async (p, pred, tries = 12) => {
   // 1. mock off + pump off -> START disabled w/ NO METER (no pzem), STOP disabled, RESET disabled
   await api(page, '/settings/api?mock=0');
   await api(page, '/control?action=reset');
-  await page.goto(BASE + '/', { timeout: 30000 }); await page.waitForTimeout(3500);
+  // disarm dry-run for the whole run: a flaky STOP fetch could otherwise trip
+  // dry-run while the pump idles at 0 A (dryRunActivation 3600 = effectively off)
+  await api(page, '/settings/api?dryRunActivation=3600');
+  await page.goto(BASE + '/', { timeout: 30000 });
+  const sNoMinOff = await waitStatus(page, s => s.minOffLeft === 0, 45);
+  await page.waitForTimeout(3500);
   let s = await readUI();
+  check('mock-off: min-off elapsed', !!sNoMinOff, JSON.stringify(sNoMinOff));
   check('mock-off: banner hidden', s.banner === 'none', s.banner);
-  check('mock-off: START NO METER disabled', s.startDisabled && s.startText === 'NO METER', JSON.stringify(s));
+  check('mock-off: START NO METER disabled', s.startDisabled && s.startText === 'START' && s.startCnt === 'NO METER', JSON.stringify(s));
   check('mock-off: STOP disabled', s.stopDisabled, JSON.stringify(s));
   check('mock-off: RESET disabled', s.resetDisabled, JSON.stringify(s));
 
@@ -75,7 +81,7 @@ const waitStatus = async (p, pred, tries = 12) => {
   await page.goto(BASE + '/', { timeout: 30000 }); await page.waitForTimeout(4000);
   s = await readUI();
   check('stopped: START blocked w/ countdown (min-off)', s.startDisabled && /^\d+m \d+s$|^\d+s$/.test(s.startCnt) && s.startText !== 'NO METER', JSON.stringify(s));
-  check('stopped: STOP shows STOPPED disabled', s.stopDisabled && s.stopText === 'STOPPED', JSON.stringify(s));
+  check('stopped: STOP shows pump off disabled', s.stopDisabled && s.stopText === 'STOP' && s.stopCnt === 'pump off', JSON.stringify(s));
 
   // 6. force trip to check RESET enabled
   await api(page, '/settings/api?mock=1&mockProfile=oc');
@@ -87,15 +93,21 @@ const waitStatus = async (p, pred, tries = 12) => {
     s = await readUI();
     check('trip: status SAFETY STOP', s.statusBig === 'SAFETY STOP', s.statusBig);
     check('trip: RESET enabled', !s.resetDisabled, JSON.stringify(s));
-    check('trip: START shows RESET FIRST', s.startDisabled && s.startText === 'RESET FIRST', JSON.stringify(s));
+    check('trip: START disabled with RESET NEEDED hint', s.startDisabled && s.startText === 'START' && s.startCnt === 'RESET NEEDED', JSON.stringify(s));
   }
 
   // 7. mock off FIRST (avoid external-start re-trip race), then reset -> clean state
   await api(page, '/settings/api?mock=0');
-  await api(page, '/control?action=reset');
+  // reset can be lost to a dropped tunnel connection despite HTTP 200 — retry until clean
+  let sFinal = null;
+  for (let i = 0; i < 4 && !sFinal; i++) {
+    await api(page, '/control?action=reset');
+    await api(page, '/settings/api?dryRunActivation=60'); // restore dry-run default
+    sFinal = await waitStatus(page, s => s.trips === 0 && !s.mock, 8);
+    if (!sFinal) await page.waitForTimeout(2500);
+  }
   await page.goto(BASE + '/', { timeout: 30000 }); await page.waitForTimeout(3500);
   s = await readUI();
-  const sFinal = await waitStatus(page, s => s.trips === 0 && !s.mock, 8);
   check('post-reset: clean (trips 0, mock 0)', !!sFinal, JSON.stringify(sFinal));
   check('post-reset: RESET disabled again', s.resetDisabled, JSON.stringify(s));
 

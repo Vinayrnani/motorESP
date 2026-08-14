@@ -8,7 +8,6 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266HTTPUpdateServer.h>
-#include <ESP8266HTTPClient.h>
 #include <EEPROM.h>
 #include <ESP8266mDNS.h>
 
@@ -798,6 +797,7 @@ void handleStatus() {
                 ",\"retryCount\":" + String(retryCount) +
                 ",\"fastFaultCount\":" + String(fastFaultCount) +
                 ",\"maxRetries\":" + String(MAX_RETRIES) +
+                ",\"maxFastFaults\":" + String(MAX_FAST_FAULTS) +
                 ",\"autoRetryIn\":" + autoRetryIn +
                 ",\"voltageStatus\":\"" + voltageStatus + "\"" +
                 ",\"startFailBlock\":" + String(startFailBlockUntil > millis() ? (startFailBlockUntil - millis()) / 1000 : 0) +
@@ -891,70 +891,6 @@ void handleControl() {
   } else {
     server.send(400, "text/plain", "Invalid action");
   }
-}
-
-void handleOtaCheck() {
-  String current = FIRMWARE_VERSION;
-  String latest = "";
-
-  int cMaj = 0, cMin = 0, cPat = 0;
-  int cFirstDot = current.indexOf('.');
-  int cLastDot = current.lastIndexOf('.');
-  if (cFirstDot > 0 && cLastDot > cFirstDot) {
-    cMaj = current.substring(0, cFirstDot).toInt();
-    cMin = current.substring(cFirstDot + 1, cLastDot).toInt();
-    cPat = current.substring(cLastDot + 1).toInt();
-  }
-
-  WiFiClientSecure client;
-  client.setInsecure();
-  HTTPClient http;
-  if (http.begin(client, VERSION_URL)) {
-    int httpCode = http.GET();
-    if (httpCode == 200) {
-      String payload = http.getString();
-      int tagStart = payload.indexOf("\"tag_name\":\"");
-      if (tagStart != -1) {
-        tagStart += 12;
-        int tagEnd = payload.indexOf('\"', tagStart);
-        if (tagEnd != -1) latest = payload.substring(tagStart, tagEnd);
-      }
-    }
-    http.end();
-  }
-
-  bool hasUpdate = false;
-  if (latest.length() > 0) {
-    String v = latest;
-    if (v.startsWith("v")) v = v.substring(1);
-    int vMaj = v.substring(0, v.indexOf('.')).toInt();
-    int vMin = v.substring(v.indexOf('.') + 1, v.lastIndexOf('.')).toInt();
-    int vPat = v.substring(v.lastIndexOf('.') + 1).toInt();
-    if (vMaj > cMaj) hasUpdate = true;
-    else if (vMaj == cMaj && vMin > cMin) hasUpdate = true;
-    else if (vMaj == cMaj && vMin == cMin && vPat > cPat) hasUpdate = true;
-  }
-
-  String json = "{\"update\":" + String(hasUpdate ? "true" : "false") +
-                ",\"currentVersion\":\"" + current +
-                "\",\"latestVersion\":\"" + latest + "\"}";
-  server.send(200, "application/json", json);
-}
-
-void handleOtaApply() {
-  static bool updateInProgress = false;
-  if (updateInProgress) {
-    server.send(200, "application/json", "{\"status\":\"error\",\"message\":\"Update already in progress\"}");
-    return;
-  }
-  updateInProgress = true;
-  bool success = performUpdate();
-  if (success) return;  // ESP.restart() inside
-  updateInProgress = false;
-  String errorMsg = "Update failed";
-  int lastErr = ESPhttpUpdate.getLastError();
-  if (lastErr != 0) errorMsg += ": " + ESPhttpUpdate.getLastErrorString();
-  server.send(200, "application/json", "{\"status\":\"error\",\"message\":\"" + errorMsg + "\"}");
 }
 
 String settingsJson() {
@@ -1076,6 +1012,11 @@ void handleSettingsApi() {
         server.send(200, "text/plain", "Trips reset");
         return;
       }
+      if (action == "defaults") {
+        initConfigDefaults();
+        server.send(200, "application/json", settingsJson());
+        return;
+      }
     }
 
     saveSettings();
@@ -1128,8 +1069,6 @@ void setup() {
   server.on("/data/api", handleData);
   server.on("/control", handleControl);
   server.on("/settings/clear", handleClearFlash);
-  server.on("/ota/check", handleOtaCheck);
-  server.on("/ota/apply", HTTP_POST, handleOtaApply);
   server.on("/settings/api", handleSettingsApi);
   server.on("/reboot", handleReboot);
   server.on("/timestamps", handleTimestamps);

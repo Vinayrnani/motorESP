@@ -35,7 +35,7 @@ if (process.env.AGENT_LOG) {
 
 function loadCfg() {
   const cfg = { baseUrl: process.env.AGENT_LLM_BASE_URL || 'https://api.openai.com/v1',
-                model: process.env.AGENT_LLM_MODEL || '',
+                model: process.env.AGENT_LLM_MODEL || 'opencode/big-pickle',
                 apiKey: process.env.AGENT_LLM_API_KEY || '' };
   try {
     const f = path.join(__dirname, 'agent_config.json');
@@ -124,19 +124,34 @@ async function llmChat(cfg, messages) {
 
 async function extractSnapshot(page) {
   return await page.evaluate(() => {
-    const out = { url: location.pathname, interactive: [], text: [] };
+    const out = { url: location.pathname, interactive: [], text: [], state: {} };
     const seen = new Set();
+    const hidden = (el) => {
+      if (el.closest && el.closest('.sheet') && !el.closest('.sheet').classList.contains('open')) return true;
+      for (let n = el; n; n = n.parentElement) {
+        const cs = getComputedStyle(n);
+        if (cs.display === 'none' || cs.visibility === 'hidden') return true;
+      }
+      return false;
+    };
     document.querySelectorAll('button, a[href], input, select, textarea, .seg button').forEach(el => {
-      const label = (el.getAttribute('aria-label') || el.innerText || el.value || el.getAttribute('href') || '').trim().slice(0, 60);
+      if (hidden(el)) return;
+      let label = (el.getAttribute('aria-label') || el.innerText || el.value || el.getAttribute('href') || '').trim().slice(0, 60);
+      const lblEl = el.id ? document.querySelector('label[for="' + el.id + '"]') : null;
+      if (lblEl && lblEl.innerText.trim()) label = lblEl.innerText.trim().slice(0, 60) + ' [' + (el.value || '') + ']';
       if (!label) return;
       const key = el.tagName + ':' + label;
       if (seen.has(key)) return;
       seen.add(key);
       const disabled = el.disabled || el.classList.contains('disabled');
-      out.interactive.push((el.id ? '#' + el.id : el.tagName) + ' "' + label + '"' + (disabled ? ' [DISABLED]' : ''));
+      const extra = el.tagName === 'SELECT' ? ' options:' + Array.from(el.options).map(o => o.textContent.trim()).join('|').slice(0, 120) : '';
+      out.interactive.push((el.id ? '#' + el.id : el.tagName) + ' "' + label + '"' + extra + (disabled ? ' [DISABLED]' : ''));
     });
-    const main = document.querySelector('#statusBig, .status-hero, #stateExpl, #summary, table');
-    if (main) out.text.push(main.innerText.slice(0, 500));
+    document.querySelectorAll('#statusBig, .status-hero, #stateExpl, #summary, #loadErr, #loadOk, #lastUpd, #msg, #toast, #moreHint, #meterHint, #reasonPanel, .num-card, .hint, #stateBadge, #tripBadge, #voltageStatus, #subLine, #statusPlain').forEach(el => {
+      if (hidden(el)) return;
+      const t = (el.innerText || '').trim().slice(0, 200);
+      if (t) out.text.push(el.id ? '#' + el.id + ': ' + t : t);
+    });
     return out;
   });
 }
@@ -154,8 +169,10 @@ Rules:
 - To navigate: {"action":"goto","target":"/dashboard"}.
 - The app has these pages: / (control), /dashboard, /settings, /data. Explore ALL of them.
 - A status of "SAFETY STOP" or trips>0 is normal (device may be in test mode); report how well it is explained, not as a device bug.
+- Page semantics: TEST MODE / #qTest just toggles a banner (device reports anyway) and needs no repeated clicks — clicking it multiple times adds no info. {SAFETY STOP/RESET NEEDED} means a protection tripped; RESET unlocks, START runs the pump (only when meter valid). LOAD MORE appends 100 rows and updates the "shown" counter (turns into "All loaded" at the end). 'last update' under the uptime row is the dashboard's live-refresh heartbeat. The QUICK ACTIONS sheet (#btnMore) must be OPEN first — TEST MODE/ERASE LOG/REBOOT buttons are inert while the sheet is closed (by design).
+- Do NOT click toggles/destructives more than once, and do not revisit pages you already audited. One fresh look at each page is enough.
 - When you have explored enough (~12-20 actions), reply {"action":"done","report":"<full human-readable findings report>"}.
-Stay under 14 actions per run.`;
+- If you are at action 15-20, STOP exploring and reply with "done" + your report — a report is better than extra clicks. Stay under 14 actions per run.`;
 
 (async () => {
   const cfg = loadCfg();
@@ -167,18 +184,33 @@ Stay under 14 actions per run.`;
   }
   console.log('BASE', BASE, '| LLM backend: opencode CLI (' + OPENCODE + ')' + (cfg.model ? ' model ' + cfg.model : ''));
 
-  const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  let browser = await chromium.launch({ headless: true });
+  let page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const consoleErrors = [], pageErrors = [], failedReqs = [];
-  page.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 200)); });
-  page.on('pageerror', e => pageErrors.push(e.message.slice(0, 200)));
-  page.on('requestfailed', r => failedReqs.push(r.url().slice(0, 120)));
+  const attachListeners = (p) => {
+    p.on('console', m => { if (m.type() === 'error') consoleErrors.push(m.text().slice(0, 200)); });
+    p.on('pageerror', e => pageErrors.push(e.message.slice(0, 200)));
+    p.on('requestfailed', r => failedReqs.push(r.url().slice(0, 120)));
+  };
+  attachListeners(page);
+
+  async function ensurePage() {
+    if (!page.isClosed() && browser.isConnected()) return;
+    console.log('[recover] browser/page died, relaunching browser');
+    await browser.close().catch(() => {});
+    browser = await chromium.launch({ headless: true });
+    page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    attachListeners(page);
+    await page.goto(BASE + '/', { timeout: 30000, waitUntil: 'domcontentloaded' }).catch(() => {});
+    await page.waitForTimeout(2000);
+  }
 
   await page.goto(BASE + '/', { timeout: 30000, waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(2500);
 
   const history = [];
   for (let step = 1; step <= MAX_STEPS; step++) {
+    await ensurePage();
     const snap = await extractSnapshot(page);
     const userMsg = 'Step ' + step + '.\n' + JSON.stringify(snap) + '\n' +
       (history.length ? '\nHistory (last 6):\n' + history.slice(-6).join('\n') : '\nNo history yet.');
@@ -194,6 +226,7 @@ Stay under 14 actions per run.`;
       }
     }
     const act = decision.action || 'done';
+    console.log('[step', step, '] action:', act, JSON.stringify(decision.target || ''), 'value:', JSON.stringify(decision.value || ''));
     try {
       if (act === 'click') await page.click(decision.target, { timeout: 4000 });
       else if (act === 'type') await page.fill(decision.target, decision.value || '', { timeout: 4000 });

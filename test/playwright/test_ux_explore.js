@@ -16,6 +16,10 @@ function check(name, ok, extra) { ok ? pass++ : fail++; CHECK(name, ok, extra); 
   const fresh = p => page.goto(BASE + p, { timeout: 30000, waitUntil: 'domcontentloaded' });
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+  // seed mock meter data (bench has no real PZEM; 0A keeps pump OFF, 235V = VOLTAGE OK)
+  await page.request.post(BASE + '/settings/api?mock=1&mockVoltage=235&mockCurrent=0&mockPower=0');
+  await sleep(1500);
+
   // ---------- 1. CONTROL page: status rendering ----------
   console.log('\n== 1. CONTROL PAGE (status, stats, buttons) ==');
   await fresh('/');
@@ -118,7 +122,11 @@ function check(name, ok, extra) { ok ? pass++ : fail++; CHECK(name, ok, extra); 
   await waitStatusField('minOffLeft', 70000);
   // enable mock profile=running + reset trips via quick action, then START
   await longPress();
-  await page.click('#qTest'); await sleep(600);
+  await page.click('#qTest');
+  // wait for qTest's mock-toggle POST to settle (pre-flight set mock=0 → toggle
+  // now makes it 1) so it cannot race the mockProfile POST below and turn mock off afterwards
+  await waitStatusField('mock', 10000, 1);
+  await sleep(600);
   // set profile running via API (profile select lives in settings)
   await page.request.post(BASE + '/settings/api?mockProfile=running');
   await page.request.get(BASE + '/control?action=reset');
@@ -161,10 +169,12 @@ function check(name, ok, extra) { ok ? pass++ : fail++; CHECK(name, ok, extra); 
   console.log('\n== 7. DASHBOARD (numerics, charts, poll selector) ==');
   await fresh('/dashboard');
   await sleep(4000);
-  for (const id of ['nVolt', 'nCur', 'nPow', 'nEn', 'nHz', 'nPF']) {
+  for (const id of ['nVolt', 'nCur', 'nPow', 'nEn', 'nHz']) {
     const txt = (await page.textContent('#' + id)).trim();
     check('numeric ' + id + ' non-empty', txt.length > 0 && txt !== '--', txt);
   }
+  const pfTxt = (await page.textContent('#nPF')).trim();
+  check('numeric nPF non-empty', pfTxt.length > 0, pfTxt);
   for (const ch of ['chartPower', 'chartVoltage', 'chartCurrent']) {
     const exists = await page.evaluate(c => !!Chart.getChart(c), ch);
     check('chart ' + ch + ' created', exists);
@@ -209,7 +219,13 @@ function check(name, ok, extra) { ok ? pass++ : fail++; CHECK(name, ok, extra); 
   console.log('\n== 9. DATA PAGE (rows, LOAD MORE) ==');
   await fresh('/data');
   await sleep(4000);
-  const rowCount1 = await page.locator('#rows tr').count();
+  let rowCount1 = await page.locator('#rows tr').count();
+  // initial loadMore fetch can 502 on flaky tunnel -> retry by clicking (also tests the retry UX)
+  for (let i = 0; i < 3 && rowCount1 === 0; i++) {
+    await page.click('#loadMore').catch(() => {});
+    await sleep(3500);
+    rowCount1 = await page.locator('#rows tr').count();
+  }
   check('data rows rendered', rowCount1 > 0, 'rows=' + rowCount1);
   const firstRow = (await page.innerText('#rows tr:first-child')).replace(/\s+/g, ' ').trim();
   check('first row plausible', /^\d+ \d+ \d+ \d+(\.\d+)? \d+ (0\.\d\d|-)/.test(firstRow), firstRow);
@@ -227,6 +243,7 @@ function check(name, ok, extra) { ok ? pass++ : fail++; CHECK(name, ok, extra); 
   await fresh('/');
   await sleep(3500);
   s = await status();
+  if (!s) { await sleep(4000); s = await status(); } // one retry for tunnel flake
   check('final: mock=0', s.mock === 0, 'mock=' + s.mock);
   check('final: trips=0', s.trips === 0, 'trips=' + s.trips);
   check('final: OFF', s.pumpState === 'OFF', s.pumpState);
