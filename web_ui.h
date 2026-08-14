@@ -27,13 +27,11 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;color:#0f172a;min-height:100dvh;overflow-x:hidden}
 .app{max-width:480px;margin:0 auto;padding:16px 16px 180px}
 
-.hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 0;margin-bottom:12px}
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 0;margin-bottom:8px}
 .hdr-left{display:flex;align-items:center;gap:10px}
 .hdr-logo{width:40px;height:40px;background:linear-gradient(135deg,#3b82f6,#06b6d4);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 8px rgba(59,130,246,.3)}
 .hdr h1{font-size:17px;font-weight:700;color:#0f172a;letter-spacing:-.3px}
 .hdr-sub{font-size:11px;color:#64748b;margin-top:1px}
-.hdr-btn{width:40px;height:40px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;color:#64748b;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.hdr-btn:active{background:#f1f5f9;transform:scale(.95)}
 
 .test-badge{display:none;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:8px 14px;border-radius:12px;font-size:12px;font-weight:600;margin-bottom:12px;border:1px solid #fde68a}
 .test-badge.on{display:flex}
@@ -68,28 +66,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .rr:last-child{border-bottom:none}
 .rr span{color:#64748b}.rr b{color:#0f172a;font-variant-numeric:tabular-nums}
 
-.sticky-ctrl{position:fixed;bottom:52px;left:0;right:0;z-index:9;padding:10px 16px 12px;background:linear-gradient(to top,#f1f5f9 80%,transparent);pointer-events:none}
+.sticky-ctrl{position:fixed;bottom:52px;left:0;right:0;z-index:9;padding:10px 16px 10px;background:#fff;border-top:1px solid #e2e8f0;box-shadow:0 -2px 10px rgba(0,0,0,.04);pointer-events:none}
 .sticky-ctrl>*{pointer-events:auto}
 .sticky-inner{max-width:480px;margin:0 auto}
-.mode-bar{display:flex;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:4px;gap:4px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:8px}
-.mode-btn{flex:1;padding:11px 0;border:none;border-radius:10px;background:transparent;color:#94a3b8;font-size:13px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.3px}
+.mode-bar{display:flex;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:3px;gap:3px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:6px}
+.mode-btn{flex:1;padding:7px 0;border:none;border-radius:10px;background:transparent;color:#94a3b8;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.2px}
 .mode-btn.active{background:#3b82f6;color:#fff;box-shadow:0 2px 8px rgba(59,130,246,.25)}
 .mode-btn:active{transform:scale(.97)}
 
-.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px}
-.act{padding:14px;border:none;border-radius:14px;font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;display:flex;flex-direction:column;align-items:center;gap:3px}
-.act:active{transform:scale(.96)}
+.actions{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
+.act{padding:13px;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:6px}
+.act:active{transform:scale(.97)}
 .act:disabled{opacity:.35;cursor:not-allowed;transform:none;filter:grayscale(.4)}
 .act-sub{font-size:10px;font-weight:600;opacity:.75;letter-spacing:.2px}
 .act:not(:disabled) .act-sub{display:none}
-.go{background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;box-shadow:0 4px 14px rgba(34,197,94,.25)}
-.stop-btn{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;box-shadow:0 4px 14px rgba(239,68,68,.25)}
-.reset-btn{background:#e2e8f0;color:#64748b;grid-column:1/-1}
-.reset-btn:not(:disabled){background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;box-shadow:0 4px 14px rgba(99,102,241,.25)}
+.act-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.go{background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;box-shadow:0 4px 14px rgba(34,197,94,.3);font-size:15px;padding:14px}
+.stop-btn{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff;box-shadow:0 4px 14px rgba(239,68,68,.25);font-size:15px;padding:14px}
+.reset-btn{background:#e2e8f0;color:#64748b;font-size:12px;padding:9px;border-radius:10px;font-weight:600}
+.reset-btn:not(:disabled){background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;box-shadow:0 2px 8px rgba(99,102,241,.2)}
 
-.meter-hint{display:none;font-size:11px;color:#92400e;text-align:center;padding:6px 10px;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;margin-bottom:6px}
-.msg{min-height:0;font-size:11px;font-weight:600;text-align:center;padding:0;transition:all .2s}
-.msg.good{color:#16a34a}.msg.bad{color:#dc2626}.msg.info{color:#3b82f6}
+.floating-msg{position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:100;background:#1e293b;color:#fff;padding:8px 16px;border-radius:10px;font-size:12px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.15);max-width:90vw;text-align:center;display:none;pointer-events:none}
+.floating-msg.good{background:#16a34a}.floating-msg.bad{background:#dc2626}.floating-msg.info{background:#3b82f6}
 
 .tab-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #e2e8f0;z-index:10;box-shadow:0 -2px 10px rgba(0,0,0,.04);padding-bottom:env(safe-area-inset-bottom,0)}
 .tab-bar a{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 0 8px;text-decoration:none;color:#94a3b8;font-size:10px;font-weight:600;gap:3px;position:relative;transition:color .15s}
@@ -98,28 +96,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .tab-bar a:active{opacity:.7}
 .tab-bar svg{width:20px;height:20px;stroke-width:2;stroke:currentColor;fill:none;flex-shrink:0}
 
-.sheet-mask{position:fixed;inset:0;background:rgba(0,0,0,.3);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40}
-.sheet-mask.open{opacity:1;pointer-events:auto}
-.sheet{position:fixed;left:0;right:0;bottom:0;background:#fff;border-radius:20px 20px 0 0;padding:20px 16px 24px;transform:translateY(100%);transition:transform .25s cubic-bezier(.32,.72,0,1);z-index:50;pointer-events:none;box-shadow:0 -4px 20px rgba(0,0,0,.1)}
-.sheet.open{transform:translateY(0);pointer-events:auto}
-.sheet-handle{width:36px;height:4px;background:#d1d5db;border-radius:2px;margin:0 auto 16px}
-.sheet-title{font-size:13px;font-weight:700;color:#0f172a;text-align:center;margin-bottom:16px}
-.sheet-btn{display:flex;align-items:center;gap:12px;width:100%;padding:14px 16px;margin-bottom:8px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;color:#0f172a;font-size:14px;font-weight:600;cursor:pointer;transition:all .15s}
-.sheet-btn:active{background:#f1f5f9;transform:scale(.98)}
-.sheet-btn .ico{font-size:18px;width:28px;text-align:center}
-.sheet-close{background:#f8fafc;border:1px solid #e2e8f0;color:#64748b;margin-top:4px;justify-content:center}
-
 .offline-toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#b45309;color:#fff;padding:6px 14px;border-radius:10px;font-size:11px;font-weight:700;z-index:99;display:none;box-shadow:0 4px 12px rgba(0,0,0,.2)}
 </style>
 </head>
 <body>
+<div class="floating-msg" id="msg"></div>
 <div class="app">
   <div class="hdr">
     <div class="hdr-left">
       <div class="hdr-logo">💧</div>
       <div><h1>Pump Control</h1><div class="hdr-sub" id="subLine">connecting…</div></div>
     </div>
-    <button class="hdr-btn" id="btnMore" title="Quick actions">⋯</button>
   </div>
 
   <div class="test-badge" id="testBanner">🧪 TEST MODE — simulated readings</div>
@@ -141,7 +128,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="reason-banner rb-info" id="reasonBanner"></div>
     <div class="rr"><span>Auto restart</span><b id="detRetry">—</b></div>
     <div class="rr"><span>Retries used</span><b id="detRetriesUsed">—</b></div>
-    <div class="rr"><span>Fast faults</span><b id="detFast">—</b></div>
+    <div class="rr"><span>Quick repeats</span><b id="detFast">—</b></div>
     <div class="rr"><span id="detBlockedLbl">Start blocked</span><b id="detBlocked">—</b></div>
   </div>
 </div>
@@ -151,15 +138,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="mode-bar">
       <button class="mode-btn" data-mode="0">OFF</button>
       <button class="mode-btn" data-mode="1">MANUAL</button>
-      <button class="mode-btn" data-mode="2">AUTO</button>
+      <button class="mode-btn" data-mode="2">AUTO RETRY</button>
     </div>
     <div class="actions">
-      <button class="act go" id="btnStart">▶ START<span class="act-sub"></span></button>
-      <button class="act stop-btn" id="btnStop">⏹ STOP<span class="act-sub"></span></button>
+      <div class="act-row">
+        <button class="act go" id="btnStart">▶ START<span class="act-sub"></span></button>
+        <button class="act stop-btn" id="btnStop">⏹ STOP<span class="act-sub"></span></button>
+      </div>
       <button class="act reset-btn" id="btnReset">↺ RESET<span class="act-sub"></span></button>
     </div>
-    <div class="meter-hint" id="meterHint">Power meter not detected — enable TEST MODE in Quick actions (⋯)</div>
-    <div class="msg" id="msg"></div>
   </div>
 </div>
 
@@ -169,16 +156,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
   <a href="/settings"><svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Settings</a>
   <a href="/data"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Data</a>
 </nav>
-
-<div class="sheet-mask" id="sheetMask"></div>
-<div class="sheet" id="sheet">
-  <div class="sheet-handle"></div>
-  <div class="sheet-title">QUICK ACTIONS</div>
-  <button class="sheet-btn" id="qTest"><span class="ico">🧪</span>TEST MODE</button>
-  <button class="sheet-btn" id="qErase"><span class="ico">🗑</span>ERASE LOG</button>
-  <button class="sheet-btn" id="qReboot"><span class="ico">🔄</span>REBOOT</button>
-  <button class="sheet-btn sheet-close" id="qClose"><span class="ico">✕</span>CLOSE</button>
-</div>
 
 <div class="offline-toast" id="offlineToast">⚠ offline — retrying…</div>
 
@@ -205,30 +182,11 @@ document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=
   fetch('/control?action=mode&mode='+b.dataset.mode).then(r=>r.text()).then(m=>feed(m));
 }));
 
-function feed(m,cls){const el=$('msg');el.textContent=m;el.className='msg '+(cls||'info');clearTimeout(feed._t);feed._t=setTimeout(()=>{if(el.textContent===m){el.textContent='';el.className='msg'}},6000)}
-function doAct(a){return fetch('/control?action='+a).then(r=>r.text()).then(m=>feed(m,m.indexOf('OK')>=0?'good':(m.indexOf('BLOCKED')>=0?'bad':'info'))).catch(()=>feed('Request failed','bad'))}
+function feed(m,cls){const el=$('msg');el.textContent=m;el.className='floating-msg '+(cls||'info');el.style.display='block';clearTimeout(feed._t);feed._t=setTimeout(()=>{el.style.display='none'},6000)}
+function doAct(a){return fetch('/control?action='+a).then(r=>r.text()).then(m=>{feed(m,m.indexOf('OK')>=0?'good':(m.indexOf('BLOCKED')>=0?'bad':'info'));window.scrollTo({top:0,behavior:'smooth'})}).catch(()=>feed('Request failed','bad'))}
 $('btnStart').onclick=()=>doAct('start');
 $('btnStop').onclick=()=>doAct('stop');
 $('btnReset').onclick=()=>{if(confirm('Reset the safety stop and unlock the pump?'))doAct('reset')};
-
-const sheet=$('sheet'),mask=$('sheetMask');
-function openSheet(){sheet.classList.add('open');mask.classList.add('open')}
-function closeSheet(){sheet.classList.remove('open');mask.classList.remove('open')}
-mask.addEventListener('click',closeSheet);
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sheet.classList.contains('open'))closeSheet()});
-$('subLine').addEventListener('click',()=>{if($('subLine').classList.contains('tap')){$('subLine').classList.remove('tap');openSheet()}});
-let pressT=null;
-document.querySelector('.hdr').addEventListener('pointerdown',()=>{pressT=setTimeout(openSheet,600)});
-document.querySelector('.hdr').addEventListener('pointerup',()=>clearTimeout(pressT));
-document.querySelector('.hdr').addEventListener('pointerleave',()=>clearTimeout(pressT));
-$('qClose').onclick=closeSheet;
-$('btnMore').addEventListener('click',openSheet);
-$('qReboot').onclick=()=>{if(confirm('Reboot the controller now?')){closeSheet();fetch('/reboot').then(()=>feed('Rebooting…','info'))}};
-$('qErase').onclick=()=>{if(confirm('Erase all recorded history and restart?')){closeSheet();fetch('/settings/clear').then(()=>feed('Erasing… device restarts','info'))}};
-$('qTest').onclick=async()=>{let s;try{s=await(await fetch('/status')).json()}catch(e){feed('Toggle failed','bad');return}
-  const next=s.mock?0:1;closeSheet();let q='/settings/api?mock='+next;
-  if(next&&!(s.voltage>1||s.current>1||s.power>1))q+='&mockVoltage=235&mockCurrent=0&mockPower=0';
-  try{const r=await fetch(q,{method:'POST'});if(!r.ok)throw 0;feed(next?'Test mode ON':'Test mode OFF','info')}catch(e){feed('Toggle failed','bad')}refresh()};
 
 function fmtCountdown(sec){if(!sec||sec<=0)return'not scheduled';const m=Math.floor(sec/60),s=sec%60;return(m?m+'m ':'')+s+'s'}
 
@@ -236,9 +194,6 @@ async function refresh(){
   try{
     const s=await(await fetch('/status')).json();
     $('subLine').textContent='v'+s.version+(s.mock?' · TEST':' · '+(s.rssi>-80?'ok':'weak'));
-    $('subLine').style.cursor=s.mock?'pointer':'default';
-    $('subLine').title=s.mock?'Tap to open Quick actions and turn TEST MODE off':'';
-    $('subLine').classList.toggle('tap',s.mock);
     $('testBanner').classList.toggle('on',s.mock);
     if(s.pzemValid||s.mock){$('stVolt').textContent=s.voltage.toFixed(0)+' V';$('stCur').textContent=s.current.toFixed(1)+' A';$('stPow').textContent=s.power>=1000?(s.power/1000).toFixed(2)+' kW':s.power.toFixed(0)+' W'}
     else{$('stVolt').textContent='--';$('stCur').textContent='--';$('stPow').textContent='--'}
@@ -253,7 +208,6 @@ async function refresh(){
     else if(s.pumpState==='TRIPPED'){big.className='hero-status alarm';big.textContent='SAFETY STOP';wrap.className='hero ring-alarm';icon.textContent='⚠';
       const names=(s.tripNames||'').split('|').filter(Boolean);const lines=names.map(n=>TRIP_PLAIN[n]||n).filter(Boolean);
       plain.textContent=(s.permanentLockout?'PERMANENT LOCKOUT — fault repeated too many times.':'The pump was stopped for safety: '+(lines.join('; ')||'a fault')+'. Press RESET, then START.')}
-    else if(s.powerRestored){big.className='hero-status warn';big.textContent='POWER RESTORED';wrap.className='hero ring-warn';icon.textContent='⚡';plain.textContent='Power came back. Press START to run again.'}
     else{big.className='hero-status stop';big.textContent='STOPPED';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent='Pump is idle. Press START when you need water.'}
 
     const rp=$('reasonPanel');
@@ -263,11 +217,7 @@ async function refresh(){
       $('reasonBanner').textContent=names.length?('Reason: '+names.map(n=>TRIP_PLAIN[n]||n).join('; ')+(s.permanentLockout?' — LOCKOUT':'')):(s.permanentLockout?'PERMANENT LOCKOUT — press RESET after fixing the fault.':'');
       $('detRetry').textContent=fmtCountdown(s.autoRetryIn);$('detRetriesUsed').textContent=s.retryCount+' of '+s.maxRetries;
       $('detFast').textContent=s.fastFaultCount+' of '+s.maxFastFaults;$('detBlockedLbl').textContent='Start blocked';
-      $('detBlocked').textContent=s.startFailBlock>0?fmtCountdown(s.startFailBlock)+' (start-fail)':(s.powerRestored?'manual start':'not blocked')}
-    else if(s.powerRestored){rp.classList.add('on');$('reasonBanner').className='reason-banner rb-info';
-      $('reasonBanner').textContent='Power restored — wait for manual start.';
-      $('detRetry').textContent='n/a';$('detRetriesUsed').textContent='n/a';$('detFast').textContent='n/a';
-      $('detBlockedLbl').textContent='Start';$('detBlocked').textContent='waiting for manual start'}
+      $('detBlocked').textContent=s.startFailBlock>0?fmtCountdown(s.startFailBlock)+' (start-fail)':'not blocked'}
     else{rp.classList.remove('on')}
 
     setModeBtn(s.pumpMode);refreshButtons(s);
@@ -281,15 +231,15 @@ function refreshButtons(s){
   const running=s.pumpState==='RUNNING',starting=s.pumpState==='STARTING',stopping=s.pumpState==='STOPPING',tripped=s.pumpState==='TRIPPED';
   let startMsg='',startCnt='';
   if(tripped||s.trips||s.permanentLockout){startMsg='START';startCnt='RESET NEEDED'}
-  else if(starting){startMsg='STARTING'}else if(stopping){startMsg='STOPPING'}else if(running){startMsg='RUNNING'}
+  else if(starting){startMsg='STARTING'}else if(stopping){startMsg='WAIT'}
+  else if(running){startMsg='RUNNING'}
   else if(s.minOffLeft>0){startMsg='BLOCKED';startCnt=fmtSec(s.minOffLeft)}
   else if(s.startFailBlock>0){startMsg='BLOCKED';startCnt=fmtSec(s.startFailBlock)}
-  else if(s.voltageLockLeft>0){startMsg='V-LOCK';startCnt=fmtSec(s.voltageLockLeft)}
-  else if(s.voltageStatus==='CRITICAL'){startMsg='START';startCnt='V-HIGH'}
+  else if(s.voltageLockLeft>0){startMsg='BLOCKED';startCnt='bad voltage'}
+  else if(s.voltageStatus==='CRITICAL'){startMsg='START';startCnt='bad voltage'}
   else if(!s.pzemValid&&!s.mock){startMsg='START';startCnt='NO METER'}
   setBtn($('btnStart'),startMsg!=='',startMsg||'START',startCnt);
   $('btnStart').title=(startCnt==='RESET NEEDED')?'Safety stop active — press RESET first':'';
-  $('meterHint').style.display=(startCnt==='NO METER')?'block':'none';
   let stopMsg='',stopCnt='',stopDisabled=true;
   if(stopping){stopMsg='STOPPING'}else if(running){if(s.minRunLeft>0){stopMsg='BLOCKED';stopCnt=fmtSec(s.minRunLeft)}else{stopMsg='STOP';stopDisabled=false}}
   else if(starting){stopMsg='STOPPING'}else{stopMsg='STOP';stopCnt='pump off'}
