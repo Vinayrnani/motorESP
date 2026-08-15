@@ -37,9 +37,9 @@ float mockPF = 0.0f;
 // ============================================
 // PUMP MODES
 // ============================================
-#define PUMP_MODE_OFF    0
-#define PUMP_MODE_MANUAL 1
-#define PUMP_MODE_AUTO   2
+#define PUMP_MODE_OFF      0
+#define PUMP_MODE_MANUAL   1
+#define PUMP_MODE_SCHEDULE 2
 
 // Trip behavior bit flags (in tripBehavior): 1 = AUTO-RETRY, 0 = LOCKOUT
 #define TB_OC_RETRY         0x01
@@ -74,6 +74,7 @@ unsigned long START_FAIL_BLOCK = 30000;
 
 unsigned long MIN_RUN_TIME = 30000;
 unsigned long MIN_OFF_TIME = 60000;
+unsigned long MAX_RUN_TIME = 10800000; // 3 hours default, 0 = disabled
 
 unsigned long AUTORETRY_DELAY = 300000;
 uint8_t MAX_RETRIES = 3;
@@ -92,6 +93,9 @@ unsigned long LOG_INTERVAL_OFF = 60000;
 #define EEPROM_SETTINGS_MAGIC 40
 #define SETTINGS_MAGIC_VAL 0xA2
 
+#define EEPROM_MAXRUN_ADDR 80
+#define MAXRUN_MAGIC_VAL 0x53
+
 #define EEPROM_WIFI_ADDR 200
 #define WIFI_MAGIC_VAL 0xAC
 
@@ -99,6 +103,21 @@ struct WifiSettings {
   uint8_t magic;
   char ssid[33];
   char password[65];
+};
+
+#define EEPROM_SCHEDULE_BASE 100
+#define SCHEDULE_SLOT_SIZE 8
+#define SCHEDULE_MAGIC_VAL 0x52
+#define NUM_SCHEDULES 3
+
+struct ScheduleSettings {
+  uint8_t magic;
+  uint8_t enabled;
+  uint8_t startHour;      // 0-23
+  uint8_t startMinute;    // 0-59
+  uint8_t stopHour;       // 0-23
+  uint8_t stopMinute;     // 0-59
+  uint8_t daysOfWeek;     // bit0=Sun..bit6=Sat
 };
 
 struct DeviceSettings {
@@ -166,6 +185,135 @@ unsigned long dryViolSince = 0;
 unsigned long voltViolSince = 0;
 uint8_t voltViolType = 0;   // 0 none, 1 over, 2 under
 unsigned long extStopSince = 0;
+
+// ============================================
+// SCHEDULE
+// ============================================
+bool schEnabled[NUM_SCHEDULES];
+uint8_t schStartH[NUM_SCHEDULES], schStartM[NUM_SCHEDULES];
+uint8_t schStopH[NUM_SCHEDULES], schStopM[NUM_SCHEDULES];
+uint8_t schDays[NUM_SCHEDULES];
+bool schWasRunning[NUM_SCHEDULES];
+bool scheduleForceOff = false;
+
+// ============================================
+// MAX RUN TIME
+// ============================================
+bool maxRunTimeStop = false;  // true when pump was stopped due to max run time limit
+
+void loadSchedule() {
+  for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
+    ScheduleSettings s;
+    EEPROM.get(EEPROM_SCHEDULE_BASE + i * SCHEDULE_SLOT_SIZE, s);
+    if (s.magic == SCHEDULE_MAGIC_VAL) {
+      schEnabled[i] = s.enabled;
+      schStartH[i] = constrain(s.startHour, 0, 23);
+      schStartM[i] = constrain(s.startMinute, 0, 59);
+      schStopH[i] = constrain(s.stopHour, 0, 23);
+      schStopM[i] = constrain(s.stopMinute, 0, 59);
+      schDays[i] = s.daysOfWeek ? s.daysOfWeek : 0x7F;
+    } else {
+      schEnabled[i] = false;
+      schStartH[i] = 6; schStartM[i] = 0;
+      schStopH[i] = 18; schStopM[i] = 0;
+      schDays[i] = 0x7F;
+    }
+  }
+}
+
+void saveSchedule(uint8_t idx) {
+  ScheduleSettings s;
+  s.magic = SCHEDULE_MAGIC_VAL;
+  s.enabled = schEnabled[idx];
+  s.startHour = schStartH[idx];
+  s.startMinute = schStartM[idx];
+  s.stopHour = schStopH[idx];
+  s.stopMinute = schStopM[idx];
+  s.daysOfWeek = schDays[idx];
+  EEPROM.put(EEPROM_SCHEDULE_BASE + idx * SCHEDULE_SLOT_SIZE, s);
+  EEPROM.commit();
+}
+
+void loadMaxRunTime() {
+  uint8_t buf[3];
+  EEPROM.get(EEPROM_MAXRUN_ADDR, buf);
+  if (buf[0] == MAXRUN_MAGIC_VAL) {
+    uint16_t secs = buf[1] | ((uint16_t)buf[2] << 8);
+    MAX_RUN_TIME = (unsigned long)secs * 1000;
+  }
+}
+
+void saveMaxRunTime() {
+  uint16_t secs = (uint16_t)(MAX_RUN_TIME / 1000);
+  uint8_t buf[3] = { MAXRUN_MAGIC_VAL, (uint8_t)(secs & 0xFF), (uint8_t)(secs >> 8) };
+  EEPROM.put(EEPROM_MAXRUN_ADDR, buf);
+  EEPROM.commit();
+}
+
+bool hasValidTime() {
+  time_t now = time(nullptr);
+  return now > 1000000000;
+}
+
+bool isScheduleWindow(uint8_t idx) {
+  if (!schEnabled[idx] || !hasValidTime()) return false;
+  time_t now = time(nullptr);
+  struct tm* t = localtime(&now);
+  uint8_t dayBit = 1 << t->tm_wday;
+  if (!(schDays[idx] & dayBit)) return false;
+
+  uint16_t curMins = t->tm_hour * 60 + t->tm_min;
+  uint16_t startMins = schStartH[idx] * 60 + schStartM[idx];
+  uint16_t stopMins = schStopH[idx] * 60 + schStopM[idx];
+
+  if (startMins < stopMins) {
+    return curMins >= startMins && curMins < stopMins;
+  } else {
+    return curMins >= startMins || curMins < stopMins;
+  }
+}
+
+bool isAnyScheduleWindow() {
+  for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
+    if (isScheduleWindow(i)) return true;
+  }
+  return false;
+}
+
+static bool windowsOverlap(uint8_t a, uint8_t b) {
+  if (!schEnabled[a] || !schEnabled[b]) return false;
+  if (!(schDays[a] & schDays[b])) return false;
+
+  uint16_t sA = schStartH[a] * 60 + schStartM[a];
+  uint16_t eA = schStopH[a] * 60 + schStopM[a];
+  uint16_t sB = schStartH[b] * 60 + schStartM[b];
+  uint16_t eB = schStopH[b] * 60 + schStopM[b];
+
+  bool wrapA = (sA >= eA);
+  bool wrapB = (sB >= eB);
+
+  if (!wrapA && !wrapB) {
+    return sA < eB && sB < eA;
+  } else if (wrapA && wrapB) {
+    return true;
+  } else if (wrapA) {
+    return sA < eB || sB < eA;
+  } else {
+    return sB < eA || sA < eB;
+  }
+}
+
+uint8_t getOverlapMask() {
+  uint8_t mask = 0;
+  for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
+    for (uint8_t j = i + 1; j < NUM_SCHEDULES; j++) {
+      if (windowsOverlap(i, j)) {
+        mask |= (1 << i) | (1 << j);
+      }
+    }
+  }
+  return mask;
+}
 
 // ============================================
 // WEB SERVER
@@ -284,7 +432,7 @@ void loadSettings() {
         && (settings.ocStartInstant >= 10 && settings.ocStartInstant <= 200);
   }
   if (sane) {
-    pumpMode = (settings.pumpMode <= PUMP_MODE_AUTO) ? settings.pumpMode : PUMP_MODE_MANUAL;
+    pumpMode = (settings.pumpMode <= PUMP_MODE_SCHEDULE) ? settings.pumpMode : PUMP_MODE_MANUAL;
     activeTrips = settings.activeTrips;
     tripBehavior = settings.tripBehavior;
     OC_RUNNING = settings.overcurrentThreshold / 10.0f;
@@ -332,6 +480,7 @@ void initConfigDefaults() {
   START_FAIL_BLOCK = 30000;
   MIN_RUN_TIME = 30000;
   MIN_OFF_TIME = 60000;
+  MAX_RUN_TIME = 10800000; // 3 hours
   AUTORETRY_DELAY = 300000;
   MAX_RETRIES = 3;
   MAX_FAST_FAULTS = 3;
@@ -383,6 +532,7 @@ bool startPump(bool manual) {
   if (pzem.valid && pzem.voltage >= VOLT_CRITICAL) return false;
 
   if (manual) powerRestored = false;
+  maxRunTimeStop = false;
   pumpState = ST_STARTING;
   stateEnterTime = now;
   verifyAt = 0;
@@ -398,6 +548,13 @@ void requestStop() {
   if (pumpState == ST_RUNNING && (now - runStartTime) < MIN_RUN_TIME) return;
   pumpState = ST_STOPPING;
   stateEnterTime = now;
+  fireStopPulse();
+}
+
+void forceStop() {
+  if (pumpState != ST_RUNNING && pumpState != ST_STARTING) return;
+  pumpState = ST_STOPPING;
+  stateEnterTime = millis();
   fireStopPulse();
 }
 
@@ -445,6 +602,7 @@ void resetTrips() {
   autoRetryAt = 0;
   voltageLockUntil = 0;
   startFailBlockUntil = 0;
+  maxRunTimeStop = false;
   saveActiveTrips();
 }
 
@@ -457,7 +615,8 @@ void runStateMachine() {
   switch (pumpState) {
     case ST_OFF: {
       // Manual (external) start detection: physical GREEN press bypasses ESP relays
-      if (!activeTrips && !permanentLockout &&
+      if (!scheduleForceOff && pumpMode != PUMP_MODE_OFF &&
+          !activeTrips && !permanentLockout &&
           pzem.valid && pzem.current >= START_SUCCESS_CURRENT &&
           (now - lastStopTime) > 1500) {
         powerRestored = false;
@@ -572,6 +731,13 @@ void runStateMachine() {
         voltViolType = 0;
         voltViolSince = 0;
       }
+
+      // Max run time limit
+      if (MAX_RUN_TIME > 0 && (now - runStartTime) >= MAX_RUN_TIME) {
+        maxRunTimeStop = true;
+        forceStop();
+        break;
+      }
       break;
     }
 
@@ -609,9 +775,62 @@ void runStateMachine() {
 uint8_t currentStatesByte() {
   uint8_t states = 0;
   if (pumpState == ST_RUNNING || pumpState == ST_STARTING) states |= STATE_PUMP_RUNNING;
-  if (pumpMode == PUMP_MODE_AUTO) states |= STATE_AUTO_MODE;
+  if (pumpMode == PUMP_MODE_SCHEDULE) states |= STATE_AUTO_MODE;
   states |= activeTrips;
   return states;
+}
+
+// ============================================
+// SCHEDULE HANDLER
+// ============================================
+void handleSchedule() {
+  if (!hasValidTime() || pumpMode == PUMP_MODE_OFF) {
+    scheduleForceOff = false;
+    return;
+  }
+
+  bool anyEnabled = false;
+  for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
+    if (schEnabled[i]) { anyEnabled = true; break; }
+  }
+  if (!anyEnabled) {
+    bool anyWasRunning = false;
+    for (uint8_t i = 0; i < NUM_SCHEDULES; i++) anyWasRunning |= schWasRunning[i];
+    if (anyWasRunning && (pumpState == ST_RUNNING || pumpState == ST_STARTING)) {
+      forceStop();
+      scheduleForceOff = true;
+    }
+    for (uint8_t i = 0; i < NUM_SCHEDULES; i++) schWasRunning[i] = false;
+    return;
+  }
+
+  bool anyWindow = isAnyScheduleWindow();
+
+  if (anyWindow) {
+    scheduleForceOff = false;
+    if (pumpState == ST_OFF && !activeTrips && !permanentLockout) {
+      bool wasSchRunning = false;
+      for (uint8_t i = 0; i < NUM_SCHEDULES; i++) wasSchRunning |= schWasRunning[i];
+      if (!wasSchRunning) powerRestored = false;
+      if (startPump(false)) {
+        for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
+          if (schEnabled[i] && isScheduleWindow(i)) schWasRunning[i] = true;
+        }
+      }
+    } else if (pumpState == ST_RUNNING || pumpState == ST_STARTING) {
+      for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
+        if (schEnabled[i] && isScheduleWindow(i)) schWasRunning[i] = true;
+      }
+    }
+  } else {
+    bool anyWasRunning = false;
+    for (uint8_t i = 0; i < NUM_SCHEDULES; i++) anyWasRunning |= schWasRunning[i];
+    if (anyWasRunning && (pumpState == ST_RUNNING || pumpState == ST_STARTING)) {
+      forceStop();
+      scheduleForceOff = true;
+    }
+    for (uint8_t i = 0; i < NUM_SCHEDULES; i++) schWasRunning[i] = false;
+  }
 }
 
 void handleLogging() {
@@ -818,7 +1037,17 @@ void handleStatus() {
                 ",\"elapsedSeconds\":" + String(getElapsedSeconds()) +
                 ",\"currentDay\":" + String(getCurrentDay()) +
                 ",\"logsInCurrentBoot\":" + String(logsInCurrentBoot) +
-                ",\"totalLogs\":" + String(getTotalLogs()) + "}";
+                ",\"totalLogs\":" + String(getTotalLogs()) +
+                ",\"pumpEnabled\":" + String(pumpMode != PUMP_MODE_OFF ? 1 : 0) +
+                ",\"scheduleActive\":" + String(hasValidTime() && isAnyScheduleWindow() ? 1 : 0) +
+                ",\"timeValid\":" + String(hasValidTime() ? 1 : 0) +
+                ",\"timeUnix\":" + String(hasValidTime() ? (long)time(nullptr) : 0) +
+                ",\"tripBehavior\":" + String(tripBehavior) +
+                ",\"maxRunTime\":" + String(MAX_RUN_TIME / 1000) +
+                ",\"maxRunTimeLeft\":" + String(
+                  (pumpState == ST_RUNNING && MAX_RUN_TIME > 0 && (millis() - runStartTime) < MAX_RUN_TIME)
+                    ? (MAX_RUN_TIME - (millis() - runStartTime)) / 1000 : 0) +
+                ",\"maxRunTimeStop\":" + String(maxRunTimeStop ? 1 : 0) + "}";
 
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.send(200, "application/json", json);
@@ -859,10 +1088,13 @@ void handleControl() {
   if (action == "start") {
     if (activeTrips || permanentLockout) {
       server.send(200, "text/plain", "BLOCKED: active trip — reset first");
-    } else if (startPump(true)) {
-      server.send(200, "text/plain", "Starting");
     } else {
-      server.send(200, "text/plain", "BLOCKED: interlock");
+      scheduleForceOff = false;
+      if (startPump(true)) {
+        server.send(200, "text/plain", "Starting");
+      } else {
+        server.send(200, "text/plain", "BLOCKED: interlock");
+      }
     }
   } else if (action == "stop") {
     if (pumpState == ST_RUNNING && (millis() - runStartTime) < MIN_RUN_TIME) {
@@ -877,17 +1109,31 @@ void handleControl() {
   } else if (action == "mode") {
     if (server.hasArg("mode")) {
       int m = server.arg("mode").toInt();
-      if (m >= PUMP_MODE_OFF && m <= PUMP_MODE_AUTO) {
+      if (m >= PUMP_MODE_OFF && m <= PUMP_MODE_SCHEDULE) {
         pumpMode = (uint8_t)m;
         if (pumpMode == PUMP_MODE_OFF) requestStop();
         saveSettings();
-        const char* modeNames[] = {"OFF", "MANUAL", "AUTO"};
+        const char* modeNames[] = {"OFF", "MANUAL", "SCHEDULE"};
         server.send(200, "text/plain", String("Mode set to ") + modeNames[m]);
       } else {
         server.send(400, "text/plain", "Invalid mode");
       }
     } else {
       server.send(400, "text/plain", "Missing mode");
+    }
+  } else if (action == "power") {
+    if (server.hasArg("state")) {
+      int s = server.arg("state").toInt();
+      if (s == 0 || s == 1) {
+        pumpMode = s ? PUMP_MODE_MANUAL : PUMP_MODE_OFF;
+        if (pumpMode == PUMP_MODE_OFF) { for (uint8_t i=0;i<NUM_SCHEDULES;i++) schWasRunning[i]=false; maxRunTimeStop=false; forceStop(); }
+        saveSettings();
+        server.send(200, "text/plain", s ? "Power ON" : "Power OFF");
+      } else {
+        server.send(400, "text/plain", "Invalid state");
+      }
+    } else {
+      server.send(400, "text/plain", "Missing state");
     }
   } else {
     server.send(400, "text/plain", "Invalid action");
@@ -917,6 +1163,7 @@ String settingsJson() {
                 ",\"startFailBlock\":" + String(START_FAIL_BLOCK / 1000) +
                 ",\"minRun\":" + String(MIN_RUN_TIME / 1000) +
                 ",\"minOff\":" + String(MIN_OFF_TIME / 1000) +
+                ",\"maxRunTime\":" + String(MAX_RUN_TIME / 1000) +
                 ",\"autoRetryDelay\":" + String(AUTORETRY_DELAY / 1000) +
                 ",\"maxRetries\":" + String(MAX_RETRIES) +
                 ",\"maxFastFaults\":" + String(MAX_FAST_FAULTS) +
@@ -929,7 +1176,17 @@ String settingsJson() {
                 ",\"elapsedSeconds\":" + String(getElapsedSeconds()) +
                 ",\"currentDay\":" + String(getCurrentDay()) +
                 ",\"wifiSsid\":\"" + String(wifiSsid) + "\"" +
-                ",\"wifiPassword\":\"" + String(wifiPassword) + "\"}";
+                ",\"wifiPassword\":\"" + String(wifiPassword) + "\"";
+  for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
+    json += ",\"sch" + String(i) + "Enabled\":" + String(schEnabled[i] ? 1 : 0);
+    json += ",\"sch" + String(i) + "StartH\":" + String(schStartH[i]);
+    json += ",\"sch" + String(i) + "StartM\":" + String(schStartM[i]);
+    json += ",\"sch" + String(i) + "StopH\":" + String(schStopH[i]);
+    json += ",\"sch" + String(i) + "StopM\":" + String(schStopM[i]);
+    json += ",\"sch" + String(i) + "Days\":" + String(schDays[i]);
+  }
+  json += ",\"schOverlap\":" + String(getOverlapMask());
+  json += ",\"timeValid\":" + String(hasValidTime() ? 1 : 0) + "}";
   return json;
 }
 
@@ -938,7 +1195,7 @@ void handleSettingsApi() {
     // Handle settings updates (POST-style)
     if (server.hasArg("pumpMode")) {
       int m = server.arg("pumpMode").toInt();
-      if (m >= PUMP_MODE_OFF && m <= PUMP_MODE_AUTO) {
+      if (m >= PUMP_MODE_OFF && m <= PUMP_MODE_SCHEDULE) {
         pumpMode = (uint8_t)m;
         if (pumpMode == PUMP_MODE_OFF) requestStop();
       }
@@ -961,6 +1218,10 @@ void handleSettingsApi() {
     if (server.hasArg("startFailBlock")) START_FAIL_BLOCK = (unsigned long)constrain(server.arg("startFailBlock").toInt(), 1, 600) * 1000;
     if (server.hasArg("minRun")) MIN_RUN_TIME = (unsigned long)constrain(server.arg("minRun").toInt(), 10, 300) * 1000;
     if (server.hasArg("minOff")) MIN_OFF_TIME = (unsigned long)constrain(server.arg("minOff").toInt(), 10, 600) * 1000;
+    if (server.hasArg("maxRunTime")) {
+      MAX_RUN_TIME = (unsigned long)constrain(server.arg("maxRunTime").toInt(), 0, 86400) * 1000;
+      saveMaxRunTime();
+    }
     if (server.hasArg("autoRetryDelay")) AUTORETRY_DELAY = (unsigned long)constrain(server.arg("autoRetryDelay").toInt(), 60, 3600) * 1000;
     if (server.hasArg("maxRetries")) MAX_RETRIES = constrain(server.arg("maxRetries").toInt(), 1, 10);
     if (server.hasArg("tripBehavior")) tripBehavior = (uint8_t)server.arg("tripBehavior").toInt();
@@ -983,6 +1244,18 @@ void handleSettingsApi() {
     if (server.hasArg("mockVoltage")) { mockVoltage = server.arg("mockVoltage").toFloat(); setMockPZEM(true); }
     if (server.hasArg("mockCurrent")) { mockCurrent = server.arg("mockCurrent").toFloat(); setMockPZEM(true); }
     if (server.hasArg("mockPower")) { mockPower = server.arg("mockPower").toFloat(); setMockPZEM(true); }
+
+    for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
+      String p = "sch" + String(i);
+      bool changed = false;
+      if (server.hasArg(p + "Enabled")) { schEnabled[i] = server.arg(p + "Enabled").toInt() != 0; changed = true; }
+      if (server.hasArg(p + "StartH")) { schStartH[i] = constrain(server.arg(p + "StartH").toInt(), 0, 23); changed = true; }
+      if (server.hasArg(p + "StartM")) { schStartM[i] = constrain(server.arg(p + "StartM").toInt(), 0, 59); changed = true; }
+      if (server.hasArg(p + "StopH")) { schStopH[i] = constrain(server.arg(p + "StopH").toInt(), 0, 23); changed = true; }
+      if (server.hasArg(p + "StopM")) { schStopM[i] = constrain(server.arg(p + "StopM").toInt(), 0, 59); changed = true; }
+      if (server.hasArg(p + "Days")) { schDays[i] = constrain(server.arg(p + "Days").toInt(), 1, 127); changed = true; }
+      if (changed) saveSchedule(i);
+    }
 
     if (server.hasArg("wifiSsid")) {
       String ssid = server.arg("wifiSsid");
@@ -1088,6 +1361,8 @@ void setup() {
   prepareBootTable();
   initLogging(currentBootId);
   loadSettings();
+  loadSchedule();
+  loadMaxRunTime();
 
   initPZEM();
 
@@ -1120,5 +1395,6 @@ void loop() {
   }
 
   runStateMachine();
+  handleSchedule();
   handleLogging();
 }

@@ -32,6 +32,22 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .hdr-logo{width:40px;height:40px;background:linear-gradient(135deg,#3b82f6,#06b6d4);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;box-shadow:0 2px 8px rgba(59,130,246,.3)}
 .hdr h1{font-size:17px;font-weight:700;color:#0f172a;letter-spacing:-.3px}
 .hdr-sub{font-size:11px;color:#64748b;margin-top:1px}
+.hdr-right{display:flex;align-items:center;gap:10px}
+.power-toggle{position:relative;display:inline-block;width:50px;height:28px;cursor:pointer}
+.power-toggle input{opacity:0;width:0;height:0;position:absolute}
+.power-track{position:absolute;inset:0;background:#cbd5e1;border-radius:14px;transition:background .25s}
+.power-toggle input:checked+.power-track{background:#22c55e}
+.power-knob{position:absolute;top:3px;left:3px;width:22px;height:22px;background:#fff;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.15);transition:transform .25s;pointer-events:none}
+.power-toggle input:checked~.power-knob{transform:translateX(22px)}
+.power-label{font-size:11px;font-weight:700;letter-spacing:.3px;min-width:28px;text-align:right}
+.power-label.on{color:#22c55e}.power-label.off{color:#94a3b8}
+
+body.off-mode .hero,
+body.off-mode .readings,
+body.off-mode .reason-card,
+body.off-mode .test-badge,
+body.off-mode .sticky-ctrl{opacity:.3;pointer-events:none;filter:grayscale(.5)}
+body.off-mode .sticky-ctrl{transform:none}
 
 .test-badge{display:none;align-items:center;gap:6px;background:#fef3c7;color:#92400e;padding:8px 14px;border-radius:12px;font-size:12px;font-weight:600;margin-bottom:12px;border:1px solid #fde68a}
 .test-badge.on{display:flex}
@@ -50,6 +66,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .hero-desc{font-size:13px;color:#64748b;line-height:1.5;max-width:280px;margin:0 auto}
 .voltage-tag{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;margin-top:12px;letter-spacing:.3px}
 .vt-ok{background:#dcfce7;color:#166534}.vt-warn{background:#fef3c7;color:#92400e}.vt-crit{background:#fee2e2;color:#991b1b}.vt-off{background:#f1f5f9;color:#64748b}
+.hero-tags{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin-top:10px}
+.hero-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.3px}
+.ht-sch{background:#dbeafe;color:#1e40af}.ht-retry{background:#ede9fe;color:#5b21b6}.ht-maxrun{background:#fef3c7;color:#92400e}
 
 .readings{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px}
 .rd{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:14px 8px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.04)}
@@ -69,11 +88,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .sticky-ctrl{position:fixed;bottom:52px;left:0;right:0;z-index:9;padding:10px 16px 10px;background:#fff;border-top:1px solid #e2e8f0;box-shadow:0 -2px 10px rgba(0,0,0,.04);pointer-events:none}
 .sticky-ctrl>*{pointer-events:auto}
 .sticky-inner{max-width:480px;margin:0 auto}
-.mode-bar{display:flex;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:3px;gap:3px;box-shadow:0 1px 3px rgba(0,0,0,.06);margin-bottom:6px}
-.mode-btn{flex:1;padding:7px 0;border:none;border-radius:10px;background:transparent;color:#94a3b8;font-size:11px;font-weight:700;cursor:pointer;transition:all .2s;letter-spacing:.2px}
-.mode-btn.active{background:#3b82f6;color:#fff;box-shadow:0 2px 8px rgba(59,130,246,.25)}
-.mode-btn:active{transform:scale(.97)}
-
 .actions{display:flex;flex-direction:column;gap:6px;margin-bottom:4px}
 .act{padding:13px;border:none;border-radius:12px;font-size:14px;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.3px;display:flex;align-items:center;justify-content:center;gap:6px}
 .act:active{transform:scale(.97)}
@@ -107,6 +121,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="hdr-logo">💧</div>
       <div><h1>Pump Control</h1><div class="hdr-sub" id="subLine">connecting…</div></div>
     </div>
+    <div class="hdr-right">
+      <label class="power-toggle" id="powerToggle"><input type="checkbox" id="powerChk" checked><span class="power-track"></span><span class="power-knob"></span></label>
+      <span class="power-label on" id="powerLbl">ON</span>
+    </div>
   </div>
 
   <div class="test-badge" id="testBanner">🧪 TEST MODE</div>
@@ -116,6 +134,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="hero-status stop" id="statusBig">OFF</div>
     <div class="hero-desc" id="statusPlain">Waiting for status…</div>
     <div class="voltage-tag vt-off" id="voltPill">METER OFFLINE</div>
+    <div class="hero-tags" id="heroTags"></div>
   </div>
 
   <div class="readings">
@@ -135,11 +154,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 
 <div class="sticky-ctrl">
   <div class="sticky-inner">
-    <div class="mode-bar">
-      <button class="mode-btn" data-mode="0">OFF</button>
-      <button class="mode-btn" data-mode="1">MANUAL</button>
-      <button class="mode-btn" data-mode="2">AUTO RETRY</button>
-    </div>
     <div class="actions">
       <div class="act-row">
         <button class="act go" id="btnStart">▶ START<span class="act-sub"></span></button>
@@ -176,12 +190,13 @@ function setupOffline(){
 }
 setupOffline();
 
-function setModeBtn(m){document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.mode)===m))}
-document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>{
-  const prev=parseInt(document.querySelector('.mode-btn.active')?.dataset.mode??0);
-  setModeBtn(parseInt(b.dataset.mode));
-  fetch('/control?action=mode&mode='+b.dataset.mode).then(r=>r.text()).then(m=>{feed(m);setTimeout(refresh,300)}).catch(()=>{setModeBtn(prev);feed('Request failed','bad')});
-}));
+$('powerChk').addEventListener('change',()=>{
+  const on=$('powerChk').checked;
+  $('powerLbl').textContent=on?'ON':'OFF';
+  $('powerLbl').className='power-label '+(on?'on':'off');
+  document.body.classList.toggle('off-mode',!on);
+  fetch('/control?action=power&state='+(on?1:0)).then(r=>r.text()).then(m=>{feed(m,m.indexOf('BLOCKED')>=0?'bad':'info');setTimeout(refresh,300)}).catch(()=>feed('Request failed','bad'));
+});
 
 function feed(m,cls){const el=$('msg');el.textContent=m;el.className='floating-msg '+(cls||'info');el.style.display='block';clearTimeout(feed._t);feed._t=setTimeout(()=>{el.style.display='none'},6000)}
 function doAct(a){return fetch('/control?action='+a).then(r=>r.text()).then(m=>{feed(m,m.indexOf('OK')>=0?'good':(m.indexOf('BLOCKED')>=0?'bad':'info'));window.scrollTo({top:0,behavior:'smooth'});setTimeout(refresh,300)}).catch(()=>feed('Request failed','bad'))}
@@ -210,8 +225,16 @@ async function refresh(){
     else if(s.pumpState==='TRIPPED'){big.className='hero-status alarm';big.textContent='SAFETY STOP';wrap.className='hero ring-alarm';icon.textContent='⚠';
       const names=(s.tripNames||'').split('|').filter(Boolean);const lines=names.map(n=>TRIP_PLAIN[n]||n).filter(Boolean);
       plain.textContent=(s.permanentLockout?'PERMANENT LOCKOUT — too many faults.':'Stopped for safety: '+(lines.join('; ')||'a fault')+'. Press RESET, then START.')}
-    else if(s.pumpMode===0){big.className='hero-status stop';big.textContent='OFF';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent='Pump is off. Set mode to MANUAL, press START.'}
-    else{big.className='hero-status stop';big.textContent='STOPPED';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent=(!s.pzemValid&&!s.mock)?'Pump is idle. Enable test mode in Settings.':'Pump is idle.'}
+    else if(s.pumpMode===0){big.className='hero-status stop';big.textContent='OFF';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent='Pump is off. Turn power ON, then press START.'}
+    else{big.className='hero-status stop';big.textContent='STOPPED';wrap.className='hero ring-stop';icon.textContent='⏸';
+      plain.textContent=s.maxRunTimeStop?'Stopped: max run time reached.':(!s.pzemValid&&!s.mock)?'Pump is idle. Enable test mode in Settings.':'Pump is idle.'}
+
+    const tags=[];
+    if(s.scheduleActive)tags.push('<span class="hero-tag ht-sch">⏰ Schedule</span>');
+    if(s.tripBehavior)tags.push('<span class="hero-tag ht-retry">🔁 Auto Retry</span>');
+    if(s.maxRunTimeStop)tags.push('<span class="hero-tag ht-maxrun">⏱ Max Run Time</span>');
+    else if(s.maxRunTime>0&&s.maxRunTimeLeft>0&&(s.pumpState==='RUNNING'||s.pumpState==='STARTING'))tags.push('<span class="hero-tag ht-maxrun">⏱ '+fmtCountdown(s.maxRunTimeLeft)+'</span>');
+    $('heroTags').innerHTML=tags.join('');
 
     const rp=$('reasonPanel');
     if(s.trips||s.permanentLockout||s.autoRetryIn>0){rp.classList.add('on');
@@ -223,11 +246,12 @@ async function refresh(){
       $('detBlocked').textContent=s.startFailBlock>0?fmtCountdown(s.startFailBlock)+' (start-fail)':'not blocked'}
     else{rp.classList.remove('on')}
 
-    setModeBtn(s.pumpMode);refreshButtons(s);
+    setPowerUI(s);refreshButtons(s);
   }catch(e){$('statusPlain').textContent='Cannot reach the controller — retrying…';setBtn($('btnStart'),true,'NO CONNECTION','');setBtn($('btnStop'),true,'NO CONNECTION','')}
 }
 
 function setBtn(btn,disabled,label,cnt){btn.disabled=!!disabled;btn.firstChild.textContent=label;const c=btn.querySelector('.act-sub');c.textContent=cnt||''}
+function setPowerUI(s){const on=s.pumpEnabled!==0;$('powerChk').checked=on;$('powerLbl').textContent=on?'ON':'OFF';$('powerLbl').className='power-label '+(on?'on':'off');document.body.classList.toggle('off-mode',!on)}
 function fmtSec(sec){if(!sec||sec<=0)return'';if(sec>=60)return Math.floor(sec/60)+'m '+(sec%60)+'s';return sec+'s'}
 
 function refreshButtons(s){
@@ -435,6 +459,16 @@ button.danger-arm{box-shadow:0 0 0 3px #fca5a5;animation:pulse-red 1s infinite;f
 @keyframes pulse-red{50%{opacity:.7}}
 .msg{min-height:20px;font-size:13px;font-weight:700;text-align:center;margin-top:8px}
 .msg.good{color:#16a34a}.msg.bad{color:#dc2626}
+.time-row{display:flex;gap:10px;align-items:center}
+.time-row input[type="time"]{flex:1;padding:10px;border:1px solid #e2e8f0;border-radius:10px;font-size:15px;background:#fff}
+.time-row span{font-size:12px;color:#64748b;font-weight:600}
+.days-row{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.day-chip{width:36px;height:36px;border-radius:50%;border:2px solid #e2e8f0;background:#fff;font-size:11px;font-weight:700;color:#94a3b8;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .15s;user-select:none;-webkit-user-select:none}
+.day-chip.active{background:#3b82f6;border-color:#3b82f6;color:#fff}
+.day-chip:active{transform:scale(.9)}
+.sch-hint{font-size:11px;color:#64748b;text-align:center;padding:8px;background:#f8fafc;border-radius:8px;margin-top:8px}
+.sch-hint.warn{color:#92400e;background:#fef3c7;border:1px solid #fde68a}
+.sch-overlap{font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:6px 10px;margin-top:8px;text-align:center}
 .banner-test{background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:8px 12px;font-weight:600;font-size:12px;margin-bottom:12px;text-align:center}
 .tab-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #e2e8f0;z-index:10;box-shadow:0 -2px 10px rgba(0,0,0,.04);padding-bottom:env(safe-area-inset-bottom,0)}
 .tab-bar a{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 0 8px;text-decoration:none;color:#94a3b8;font-size:10px;font-weight:600;gap:3px;position:relative;transition:color .15s}
@@ -450,7 +484,7 @@ button.danger-arm{box-shadow:0 0 0 3px #fca5a5;animation:pulse-red 1s infinite;f
   <div class="hdr"><div class="hdr-logo">⚙️</div><h1>Pump Settings</h1></div>
   <div id="testBanner" class="banner-test" style="display:none">🧪 TEST MODE currently ON — simulated readings used.</div>
 
-  <div class="sec open" id="secBasic">
+  <div class="sec" id="secBasic">
     <div class="sec-hdr" onclick="toggleSec('secBasic')">
       <div class="sec-left">
         <div class="sec-icon" style="background:#dcfce7;color:#166534">⚡</div>
@@ -487,6 +521,73 @@ button.danger-arm{box-shadow:0 0 0 3px #fca5a5;animation:pulse-red 1s infinite;f
         <div class="field"><label for="voltCritical">Critical voltage (V)</label><input type="number" id="voltCritical" min="250" max="300"></div>
         <div class="field"><label for="voltageDelay">Confirm delay (s)</label><input type="number" id="voltageDelay" min="1" max="60"></div>
         <div class="field"><label for="voltageLockout">Voltage lockout (s)</label><input type="number" id="voltageLockout" min="0" max="3600"></div>
+      </div>
+
+      <div class="card"><h3>⏱ Max Run Time</h3><p class="cardhelp">Stops the pump after a set duration. 0 = disabled.</p>
+        <div class="field"><label for="maxRunTime">Max run time (s)</label><p class="help">Pump stops automatically after this time. Default 10800s (3h).</p><input type="number" id="maxRunTime" min="0" max="86400" step="60"></div>
+      </div>
+
+    </div></div>
+  </div>
+
+  <div class="sec" id="secSchedule">
+    <div class="sec-hdr" onclick="toggleSec('secSchedule')">
+      <div class="sec-left">
+        <div class="sec-icon" style="background:#dbeafe;color:#1e40af">⏰</div>
+        <div><div class="sec-title">Schedule</div><div class="sec-sub">Auto start/stop by time</div></div>
+      </div>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6,9 12,15 18,9"/></svg>
+    </div>
+    <div class="sec-body"><div class="sec-inner">
+
+      <div class="sch-hint" id="schTimeHint">⏳ Waiting for time sync…</div>
+
+      <div class="card" id="schCard0"><h3>Schedule 1</h3>
+        <div class="field"><label><input type="checkbox" id="sch0Enabled" class="sch-cb" data-i="0" style="width:auto;height:auto;transform:scale(1.3);margin-right:8px;vertical-align:middle"> Enable</label></div>
+        <div class="field"><label>Start time</label><div class="time-row"><input type="time" id="sch0Start" value="06:00"></div></div>
+        <div class="field"><label>Stop time</label><div class="time-row"><input type="time" id="sch0Stop" value="18:00"></div></div>
+        <div class="field"><label>Active days</label><div class="days-row" data-sch="0">
+          <div class="day-chip active" data-bit="1">S</div>
+          <div class="day-chip active" data-bit="2">M</div>
+          <div class="day-chip active" data-bit="4">T</div>
+          <div class="day-chip active" data-bit="8">W</div>
+          <div class="day-chip active" data-bit="16">T</div>
+          <div class="day-chip active" data-bit="32">F</div>
+          <div class="day-chip active" data-bit="64">S</div>
+        </div></div>
+        <div class="sch-overlap" id="schOverlap0" style="display:none">⚠ Overlaps with another schedule</div>
+      </div>
+
+      <div class="card" id="schCard1"><h3>Schedule 2</h3>
+        <div class="field"><label><input type="checkbox" id="sch1Enabled" class="sch-cb" data-i="1" style="width:auto;height:auto;transform:scale(1.3);margin-right:8px;vertical-align:middle"> Enable</label></div>
+        <div class="field"><label>Start time</label><div class="time-row"><input type="time" id="sch1Start" value="06:00"></div></div>
+        <div class="field"><label>Stop time</label><div class="time-row"><input type="time" id="sch1Stop" value="18:00"></div></div>
+        <div class="field"><label>Active days</label><div class="days-row" data-sch="1">
+          <div class="day-chip active" data-bit="1">S</div>
+          <div class="day-chip active" data-bit="2">M</div>
+          <div class="day-chip active" data-bit="4">T</div>
+          <div class="day-chip active" data-bit="8">W</div>
+          <div class="day-chip active" data-bit="16">T</div>
+          <div class="day-chip active" data-bit="32">F</div>
+          <div class="day-chip active" data-bit="64">S</div>
+        </div></div>
+        <div class="sch-overlap" id="schOverlap1" style="display:none">⚠ Overlaps with another schedule</div>
+      </div>
+
+      <div class="card" id="schCard2"><h3>Schedule 3</h3>
+        <div class="field"><label><input type="checkbox" id="sch2Enabled" class="sch-cb" data-i="2" style="width:auto;height:auto;transform:scale(1.3);margin-right:8px;vertical-align:middle"> Enable</label></div>
+        <div class="field"><label>Start time</label><div class="time-row"><input type="time" id="sch2Start" value="06:00"></div></div>
+        <div class="field"><label>Stop time</label><div class="time-row"><input type="time" id="sch2Stop" value="18:00"></div></div>
+        <div class="field"><label>Active days</label><div class="days-row" data-sch="2">
+          <div class="day-chip active" data-bit="1">S</div>
+          <div class="day-chip active" data-bit="2">M</div>
+          <div class="day-chip active" data-bit="4">T</div>
+          <div class="day-chip active" data-bit="8">W</div>
+          <div class="day-chip active" data-bit="16">T</div>
+          <div class="day-chip active" data-bit="32">F</div>
+          <div class="day-chip active" data-bit="64">S</div>
+        </div></div>
+        <div class="sch-overlap" id="schOverlap2" style="display:none">⚠ Overlaps with another schedule</div>
       </div>
 
     </div></div>
@@ -555,16 +656,33 @@ let _offlineEl=null,_offlineT=null;
 function toggleSec(id){$(id).classList.toggle('open')}
 const fields=['ocRunning','ocStartInstant','ocDelay','dryRunCurrent','dryRunPower','dryRunDelay','dryRunActivation',
   'voltOver','voltUnder','voltWarn','voltCritical','voltageDelay','voltageLockout',
-  'startSuccessCurrent','startVerifyDelay','startFailBlock','minRun','minOff',
+  'startSuccessCurrent','startVerifyDelay','startFailBlock','minRun','minOff','maxRunTime',
   'autoRetryDelay','maxRetries','logIntervalRunning','logIntervalOff','pzemReadRunning'];
 function syncMockUI(){$('cMockProfile').disabled=!$('cMock').checked;$('cMockProfile').closest('.field').style.opacity=$('cMock').checked?1:.55;$('mockProfileHint').style.display=$('cMock').checked?'none':'block'}
 async function load(){const s=await(await fetch('/settings/api')).json();$('testBanner').style.display=s.mock?'block':'none';$('cMock').checked=s.mock;syncMockUI();fields.forEach(f=>{if($(f))$(f).value=s[f]});
-  $('tb0').checked=!!(s.tripBehavior&1);$('tb1').checked=!!(s.tripBehavior&2);$('tb2').checked=!!(s.tripBehavior&4);$('tb3').checked=!!(s.tripBehavior&8);$('tb4').checked=!!(s.tripBehavior&16);$('tb5').checked=!!(s.tripBehavior&32)}
+  $('tb0').checked=!!(s.tripBehavior&1);$('tb1').checked=!!(s.tripBehavior&2);$('tb2').checked=!!(s.tripBehavior&4);$('tb3').checked=!!(s.tripBehavior&8);$('tb4').checked=!!(s.tripBehavior&16);$('tb5').checked=!!(s.tripBehavior&32);
+  for(let i=0;i<3;i++){
+    $('sch'+i+'Enabled').checked=!!s['sch'+i+'Enabled'];
+    $('sch'+i+'Start').value=String(s['sch'+i+'StartH']||0).padStart(2,'0')+':'+String(s['sch'+i+'StartM']||0).padStart(2,'0');
+    $('sch'+i+'Stop').value=String(s['sch'+i+'StopH']||0).padStart(2,'0')+':'+String(s['sch'+i+'StopM']||0).padStart(2,'0');
+    const days=s['sch'+i+'Days']||0x7F;
+    document.querySelectorAll('.days-row[data-sch="'+i+'"] .day-chip').forEach(c=>{c.classList.toggle('active',!!(days&parseInt(c.dataset.bit)))});
+    const ov=$('schOverlap'+i);if(ov)ov.style.display=(s.schOverlap&(1<<i))?'block':'none';
+  }
+  const hint=$('schTimeHint');
+  if(s.timeValid){hint.className='sch-hint';hint.textContent='✓ Time synced'}
+  else{hint.className='sch-hint warn';hint.textContent='⏳ Waiting for time sync — schedule inactive until time is available (NTP or browser sync)'}}
 function feed(t,cls){const el=$('msg');el.textContent=t;el.className='msg '+(cls||'');clearTimeout(feed._t);feed._t=setTimeout(()=>{if(el.textContent===t){el.textContent='';el.className='msg'}},4000)}
 $('btnSave').onclick=async()=>{const bad=fields.filter(f=>{const el=$(f);if(!el||!el.value)return false;const v=parseFloat(el.value),mn=el.min?parseFloat(el.min):-Infinity,mx=el.max?parseFloat(el.max):Infinity;return isNaN(v)||v<mn||v>mx});
   if(bad.length){feed('Out of range: '+bad.join(', '),'bad');return}const btn=$('btnSave');btn.disabled=true;btn.textContent='Saving…';const p=new URLSearchParams();
   fields.forEach(f=>{if($(f))p.append(f,$(f).value)});p.append('mock',$('cMock').checked?'1':'0');let tb=0;
   if($('tb0').checked)tb|=1;if($('tb1').checked)tb|=2;if($('tb2').checked)tb|=4;if($('tb3').checked)tb|=8;if($('tb4').checked)tb|=16;if($('tb5').checked)tb|=32;p.append('tripBehavior',tb);
+  for(let i=0;i<3;i++){
+    p.append('sch'+i+'Enabled',$('sch'+i+'Enabled').checked?'1':'0');
+    const st=$('sch'+i+'Start').value.split(':');p.append('sch'+i+'StartH',parseInt(st[0]||0));p.append('sch'+i+'StartM',parseInt(st[1]||0));
+    const sp=$('sch'+i+'Stop').value.split(':');p.append('sch'+i+'StopH',parseInt(sp[0]||0));p.append('sch'+i+'StopM',parseInt(sp[1]||0));
+    let days=0;document.querySelectorAll('.days-row[data-sch="'+i+'"] .day-chip.active').forEach(c=>days|=parseInt(c.dataset.bit));p.append('sch'+i+'Days',days||0x7F);
+  }
   try{const r=await fetch('/settings/api?'+p.toString(),{method:'POST'});feed(r.status===200?'✓ Settings saved':'✗ Save failed ('+r.status+')',r.status===200?'good':'bad');$('testBanner').style.display=$('cMock').checked?'block':'none'}
   catch(e){feed('✗ Save failed — unreachable','bad')}btn.disabled=false;btn.textContent='💾 SAVE ALL SETTINGS'};
 $('cMock').addEventListener('change',()=>{syncMockUI();feed($('cMock').checked?'Test readings ON on save':'Test readings OFF on save')});
@@ -573,6 +691,7 @@ const bcd=$('btnClearData');bcd.onclick=()=>{if(bcd.dataset.armed==='1'){bcd.dat
 const bdf=$('btnDefaults');bdf.onclick=async()=>{if(bdf.dataset.armed!=='1'){bdf.dataset.armed='1';bdf.textContent='⚠ TAP AGAIN to reset';bdf.classList.add('danger-arm');clearTimeout(bdf._t);bdf._t=setTimeout(()=>{bdf.dataset.armed='0';bdf.textContent='↺ Reset to Defaults';bdf.classList.remove('danger-arm')},5000);return}
   bdf.dataset.armed='0';bdf.textContent='↺ Reset to Defaults';bdf.classList.remove('danger-arm');
   try{const r=await fetch('/settings/api?action=defaults',{method:'POST'});if(!r.ok)throw 0;feed('✓ Reset to defaults','good');load()}catch(e){feed('✗ Failed','bad')}};
+document.querySelectorAll('.days-row').forEach(row=>{row.querySelectorAll('.day-chip').forEach(c=>c.addEventListener('click',()=>c.classList.toggle('active')))});
 load();
 </script>
 </body>
