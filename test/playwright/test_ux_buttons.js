@@ -30,13 +30,13 @@ const waitStatus = async (p, pred, tries = 12) => {
   const readUI = () => page.evaluate(() => ({
     startDisabled: document.getElementById('btnStart').disabled,
     startText: document.getElementById('btnStart').firstChild.textContent.trim(),
-    startCnt: document.getElementById('btnStart').querySelector('.cnt').textContent,
+    startCnt: document.getElementById('btnStart').querySelector('.act-sub').textContent,
     stopDisabled: document.getElementById('btnStop').disabled,
     stopText: document.getElementById('btnStop').firstChild.textContent.trim(),
-    stopCnt: document.getElementById('btnStop').querySelector('.cnt').textContent,
+    stopCnt: document.getElementById('btnStop').querySelector('.act-sub').textContent,
     resetDisabled: document.getElementById('btnReset').disabled,
     statusBig: document.getElementById('statusBig').textContent,
-    banner: document.getElementById('testBanner').style.display,
+    banner: getComputedStyle(document.getElementById('testBanner')).display,
   }));
 
   // 1. mock off + pump off -> START disabled w/ NO METER (no pzem), STOP disabled, RESET disabled

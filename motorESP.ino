@@ -881,7 +881,8 @@ void handleControl() {
         pumpMode = (uint8_t)m;
         if (pumpMode == PUMP_MODE_OFF) requestStop();
         saveSettings();
-        server.send(200, "text/plain", "Mode set");
+        const char* modeNames[] = {"OFF", "MANUAL", "AUTO"};
+        server.send(200, "text/plain", String("Mode set to ") + modeNames[m]);
       } else {
         server.send(400, "text/plain", "Invalid mode");
       }

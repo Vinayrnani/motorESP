@@ -178,8 +178,9 @@ setupOffline();
 
 function setModeBtn(m){document.querySelectorAll('.mode-btn').forEach(b=>b.classList.toggle('active',parseInt(b.dataset.mode)===m))}
 document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>{
+  const prev=parseInt(document.querySelector('.mode-btn.active')?.dataset.mode??0);
   setModeBtn(parseInt(b.dataset.mode));
-  fetch('/control?action=mode&mode='+b.dataset.mode).then(r=>r.text()).then(m=>feed(m));
+  fetch('/control?action=mode&mode='+b.dataset.mode).then(r=>r.text()).then(m=>feed(m)).catch(()=>{setModeBtn(prev);feed('Request failed','bad')});
 }));
 
 function feed(m,cls){const el=$('msg');el.textContent=m;el.className='floating-msg '+(cls||'info');el.style.display='block';clearTimeout(feed._t);feed._t=setTimeout(()=>{el.style.display='none'},6000)}
@@ -205,10 +206,12 @@ async function refresh(){
 
     const big=$('statusBig'),plain=$('statusPlain'),wrap=$('heroWrap'),icon=$('statusIcon');
     if(s.pumpState==='RUNNING'){big.className='hero-status ok';big.textContent='RUNNING';wrap.className='hero ring-ok';icon.textContent='⚡';plain.textContent='Pump is running normally.'}
+    else if(s.pumpState==='STARTING'){big.className='hero-status ok';big.textContent='STARTING…';wrap.className='hero ring-ok';icon.textContent='🔄';plain.textContent='Starting the pump — verifying…'}
     else if(s.pumpState==='TRIPPED'){big.className='hero-status alarm';big.textContent='SAFETY STOP';wrap.className='hero ring-alarm';icon.textContent='⚠';
       const names=(s.tripNames||'').split('|').filter(Boolean);const lines=names.map(n=>TRIP_PLAIN[n]||n).filter(Boolean);
       plain.textContent=(s.permanentLockout?'PERMANENT LOCKOUT — fault repeated too many times.':'The pump was stopped for safety: '+(lines.join('; ')||'a fault')+'. Press RESET, then START.')}
-    else{big.className='hero-status stop';big.textContent='STOPPED';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent='Pump is idle. Press START when you need water.'}
+    else if(s.pumpMode===0){big.className='hero-status stop';big.textContent='OFF';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent='Pump is off. Switch to MANUAL, then press START.'}
+    else{big.className='hero-status stop';big.textContent='STOPPED';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent=(!s.pzemValid&&!s.mock)?'Pump is idle. Enable TEST MODE in Settings, then START.':'Pump is idle. Press START when you need water.'}
 
     const rp=$('reasonPanel');
     if(s.trips||s.permanentLockout||s.autoRetryIn>0){rp.classList.add('on');
@@ -242,7 +245,7 @@ function refreshButtons(s){
   $('btnStart').title=(startCnt==='RESET NEEDED')?'Safety stop active — press RESET first':'';
   let stopMsg='',stopCnt='',stopDisabled=true;
   if(stopping){stopMsg='STOPPING'}else if(running){if(s.minRunLeft>0){stopMsg='BLOCKED';stopCnt=fmtSec(s.minRunLeft)}else{stopMsg='STOP';stopDisabled=false}}
-  else if(starting){stopMsg='STOPPING'}else{stopMsg='STOP';stopCnt='pump off'}
+  else if(starting){stopMsg='STOPPING'}else if(tripped){stopMsg='STOP';stopCnt='safety stop'}else{stopMsg='STOP';stopCnt='pump off'}
   setBtn($('btnStop'),stopDisabled,stopMsg,stopCnt);
   setBtn($('btnReset'),!(tripped||s.trips||s.permanentLockout),'RESET','');
 }
@@ -339,7 +342,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="num-card"><div class="num-label">Freq</div><div class="num-value"><span id="nHz">--</span></div></div>
       <div class="num-card"><div class="num-label">PF</div><div class="num-value"><span id="nPF">--</span></div><div id="pfHint" style="display:none;font-size:10px;color:#94a3b8;margin-top:2px">load &gt; 0.5A</div></div>
     </div>
-    <div class="hint" id="dashMeterHint" style="display:none">Power meter not detected — enable TEST MODE in Control → ⋯</div>
+    <div class="hint" id="dashMeterHint" style="display:none">Power meter not detected — turn on TEST MODE in Settings to simulate readings.</div>
   </div>
 
   <div class="card"><h6>⚡ Power (W)</h6><div class="chart-box"><canvas id="chartPower"></canvas><div id="chFall1" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
@@ -566,7 +569,7 @@ const fields=['ocRunning','ocStartInstant','ocDelay','dryRunCurrent','dryRunPowe
 function syncMockUI(){$('cMockProfile').disabled=!$('cMock').checked;$('cMockProfile').closest('.field').style.opacity=$('cMock').checked?1:.55;$('mockProfileHint').style.display=$('cMock').checked?'none':'block'}
 async function load(){const s=await(await fetch('/settings/api')).json();$('testBanner').style.display=s.mock?'block':'none';$('cMock').checked=s.mock;syncMockUI();fields.forEach(f=>{if($(f))$(f).value=s[f]});
   $('tb0').checked=!!(s.tripBehavior&1);$('tb1').checked=!!(s.tripBehavior&2);$('tb2').checked=!!(s.tripBehavior&4);$('tb3').checked=!!(s.tripBehavior&8);$('tb4').checked=!!(s.tripBehavior&16);$('tb5').checked=!!(s.tripBehavior&32)}
-function feed(t,cls){const el=$('msg');el.textContent=t;el.className='msg '+(cls||'');const ts=$('toast');if(ts){ts.textContent=t;ts.className='toast '+(cls==='bad'?'bad':'');ts.style.display='block'}clearTimeout(feed._t);feed._t=setTimeout(()=>{if(el.textContent===t){el.textContent='';el.className='msg'}const t2=$('toast');if(t2)t2.style.display='none'},4000)}
+function feed(t,cls){const el=$('msg');el.textContent=t;el.className='msg '+(cls||'');clearTimeout(feed._t);feed._t=setTimeout(()=>{if(el.textContent===t){el.textContent='';el.className='msg'}},4000)}
 $('btnSave').onclick=async()=>{const bad=fields.filter(f=>{const el=$(f);if(!el||!el.value)return false;const v=parseFloat(el.value),mn=el.min?parseFloat(el.min):-Infinity,mx=el.max?parseFloat(el.max):Infinity;return isNaN(v)||v<mn||v>mx});
   if(bad.length){feed('Out of range: '+bad.join(', '),'bad');return}const btn=$('btnSave');btn.disabled=true;btn.textContent='Saving…';const p=new URLSearchParams();
   fields.forEach(f=>{if($(f))p.append(f,$(f).value)});p.append('mock',$('cMock').checked?'1':'0');let tb=0;

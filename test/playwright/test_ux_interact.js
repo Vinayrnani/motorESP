@@ -12,30 +12,31 @@ const ok = (name, cond, extra = '') => { console.log((cond ? 'PASS' : 'FAIL') + 
 
   // seed mock meter data (bench has no real PZEM; 0A keeps pump OFF, 235V = VOLTAGE OK)
   await page.request.post(BASE + '/settings/api?mock=1&mockVoltage=235&mockCurrent=0&mockPower=0');
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(4000);
 
   // ---- Control: read-only checks first (no pump state changes)
   await page.goto(BASE + '/', { timeout: 30000, waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(3800);
   const statusBig = await page.textContent('#statusBig');
-  ok('status big text is one of RUNNING/STOPPED/SAFETY STOP/POWER RESTORED', ['RUNNING','STOPPED','SAFETY STOP','POWER RESTORED'].some(x => statusBig.includes(x)), statusBig.trim());
+  ok('status big text is one of RUNNING/STOPPED/SAFETY STOP/POWER RESTORED/STARTING…', ['RUNNING','STOPPED','SAFETY STOP','POWER RESTORED','STARTING…'].some(x => statusBig.includes(x)), statusBig.trim());
   const voltTx = (await page.textContent('#stVolt')).trim();
   ok('voltage has unit', /^\d+ V$/.test(voltTx), voltTx);
   const powTx = (await page.textContent('#stPow')).trim();
   ok('power single unit', /^\d+(\.\d+)? (W|kW)$/.test(powTx), powTx);
 
   // mode badges: 3 candidates exist
-  const badges = await page.evaluate(() => [...document.querySelectorAll('.seg button')].map(b => ({ m: b.dataset.mode, active: b.classList.contains('active') })));
+  const badges = await page.evaluate(() => [...document.querySelectorAll('.mode-btn')].map(b => ({ m: b.dataset.mode, active: b.classList.contains('active') })));
   ok('exactly one mode badge active', badges.filter(b => b.active).length === 1, JSON.stringify(badges));
 
   // ---- Dashboard read-only
   await page.goto(BASE + '/dashboard', { timeout: 30000 });
-  await page.waitForTimeout(3800);
+  await page.waitForTimeout(5000);
   const nVolt = (await page.textContent('#nVolt')).trim();
   ok('dashboard voltage with unit', /^\d+ V$/.test(nVolt), nVolt);
   const nPow = (await page.textContent('#nPow')).trim();
   ok('dashboard power single unit', /^\d+(\.\d+)? (W|kW)$/.test(nPow), nPow);
   ok('charts created', await page.evaluate(() => {
+    if (typeof Chart === 'undefined') return false;
     const c = Chart.getChart('chartPower');
     return !!c && c.data.datasets[0].data.length >= 0;
   }));
