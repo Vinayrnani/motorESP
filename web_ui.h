@@ -7,7 +7,7 @@ const char _TAB_BAR[] PROGMEM = R"rawliteral(
 <nav class="tab-bar">
   <a href="/" TAB_CTRL><svg viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>Control</a>
   <a href="/dashboard" TAB_DASH><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Dashboard</a>
-  <a href="/settings" TAB_SET><svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Settings</a>
+  <a href="/settings" TAB_SET><svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Settings</a>
   <a href="/data" TAB_DATA><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Data</a>
 </nav>)rawliteral";
 
@@ -109,7 +109,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     </div>
   </div>
 
-  <div class="test-badge" id="testBanner">🧪 TEST MODE — simulated readings</div>
+  <div class="test-badge" id="testBanner">🧪 TEST MODE</div>
 
   <div class="hero ring-stop" id="heroWrap">
     <div class="status-ring"><span class="status-icon" id="statusIcon">⏸</span></div>
@@ -153,7 +153,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 <nav class="tab-bar">
   <a href="/" class="active"><svg viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>Control</a>
   <a href="/dashboard"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Dashboard</a>
-  <a href="/settings"><svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Settings</a>
+  <a href="/settings"><svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Settings</a>
   <a href="/data"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Data</a>
 </nav>
 
@@ -180,11 +180,11 @@ function setModeBtn(m){document.querySelectorAll('.mode-btn').forEach(b=>b.class
 document.querySelectorAll('.mode-btn').forEach(b=>b.addEventListener('click',()=>{
   const prev=parseInt(document.querySelector('.mode-btn.active')?.dataset.mode??0);
   setModeBtn(parseInt(b.dataset.mode));
-  fetch('/control?action=mode&mode='+b.dataset.mode).then(r=>r.text()).then(m=>feed(m)).catch(()=>{setModeBtn(prev);feed('Request failed','bad')});
+  fetch('/control?action=mode&mode='+b.dataset.mode).then(r=>r.text()).then(m=>{feed(m);setTimeout(refresh,300)}).catch(()=>{setModeBtn(prev);feed('Request failed','bad')});
 }));
 
 function feed(m,cls){const el=$('msg');el.textContent=m;el.className='floating-msg '+(cls||'info');el.style.display='block';clearTimeout(feed._t);feed._t=setTimeout(()=>{el.style.display='none'},6000)}
-function doAct(a){return fetch('/control?action='+a).then(r=>r.text()).then(m=>{feed(m,m.indexOf('OK')>=0?'good':(m.indexOf('BLOCKED')>=0?'bad':'info'));window.scrollTo({top:0,behavior:'smooth'})}).catch(()=>feed('Request failed','bad'))}
+function doAct(a){return fetch('/control?action='+a).then(r=>r.text()).then(m=>{feed(m,m.indexOf('OK')>=0?'good':(m.indexOf('BLOCKED')>=0?'bad':'info'));window.scrollTo({top:0,behavior:'smooth'});setTimeout(refresh,300)}).catch(()=>feed('Request failed','bad'))}
 $('btnStart').onclick=()=>doAct('start');
 $('btnStop').onclick=()=>doAct('stop');
 $('btnReset').onclick=()=>{if(confirm('Reset the safety stop and unlock the pump?'))doAct('reset')};
@@ -205,13 +205,13 @@ async function refresh(){
       pill.textContent={NORMAL:'VOLTAGE OK',WARNING:'VOLTAGE HIGH',CRITICAL:'VOLTAGE CRITICAL'}[s.voltageStatus]||s.voltageStatus}
 
     const big=$('statusBig'),plain=$('statusPlain'),wrap=$('heroWrap'),icon=$('statusIcon');
-    if(s.pumpState==='RUNNING'){big.className='hero-status ok';big.textContent='RUNNING';wrap.className='hero ring-ok';icon.textContent='⚡';plain.textContent='Pump is running normally.'}
-    else if(s.pumpState==='STARTING'){big.className='hero-status ok';big.textContent='STARTING…';wrap.className='hero ring-ok';icon.textContent='🔄';plain.textContent='Starting the pump — verifying…'}
+    if(s.pumpState==='RUNNING'){big.className='hero-status ok';big.textContent='RUNNING';wrap.className='hero ring-ok';icon.textContent='⚡';plain.textContent='Running normally.'}
+    else if(s.pumpState==='STARTING'){big.className='hero-status ok';big.textContent='STARTING…';wrap.className='hero ring-ok';icon.textContent='🔄';plain.textContent='Starting…'}
     else if(s.pumpState==='TRIPPED'){big.className='hero-status alarm';big.textContent='SAFETY STOP';wrap.className='hero ring-alarm';icon.textContent='⚠';
       const names=(s.tripNames||'').split('|').filter(Boolean);const lines=names.map(n=>TRIP_PLAIN[n]||n).filter(Boolean);
-      plain.textContent=(s.permanentLockout?'PERMANENT LOCKOUT — fault repeated too many times.':'The pump was stopped for safety: '+(lines.join('; ')||'a fault')+'. Press RESET, then START.')}
-    else if(s.pumpMode===0){big.className='hero-status stop';big.textContent='OFF';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent='Pump is off. Switch to MANUAL, then press START.'}
-    else{big.className='hero-status stop';big.textContent='STOPPED';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent=(!s.pzemValid&&!s.mock)?'Pump is idle. Enable TEST MODE in Settings, then START.':'Pump is idle. Press START when you need water.'}
+      plain.textContent=(s.permanentLockout?'PERMANENT LOCKOUT — too many faults.':'Stopped for safety: '+(lines.join('; ')||'a fault')+'. Press RESET, then START.')}
+    else if(s.pumpMode===0){big.className='hero-status stop';big.textContent='OFF';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent='Pump is off. Set mode to MANUAL, press START.'}
+    else{big.className='hero-status stop';big.textContent='STOPPED';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent=(!s.pzemValid&&!s.mock)?'Pump is idle. Enable test mode in Settings.':'Pump is idle.'}
 
     const rp=$('reasonPanel');
     if(s.trips||s.permanentLockout||s.autoRetryIn>0){rp.classList.add('on');
@@ -318,11 +318,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="hdr-right">
       <span>Refresh</span>
       <select id="pollSel"><option value="5000">5s</option><option value="3000">3s</option><option value="2000">2s</option><option value="1000">1s</option></select>
-      <span id="pollActive" style="font-size:11px;color:#94a3b8">(5s)</span>
     </div>
   </div>
 
-  <div id="testBanner" class="banner-test" style="display:none">🧪 TEST MODE — numbers below are simulated.</div>
+  <div id="testBanner" class="banner-test" style="display:none">🧪 TEST MODE</div>
 
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px">
@@ -331,9 +330,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
         <span id="tripBadge" class="badge badge-tripped" style="display:none">SAFETY STOP</span>
         <span id="voltageStatus" class="voltage-status vs-normal">VOLTAGE OK</span>
       </div>
-      <span class="hist">Uptime <b id="uptime">--</b></span>
+      <span class="hist">Uptime <b id="uptime">--</b> · <span id="lastUpd">—</span></span>
     </div>
-    <div class="hist" id="lastUpd" style="text-align:center;font-size:11px;margin-top:6px">—</div>
     <div class="numerics">
       <div class="num-card"><div class="num-label">Voltage</div><div class="num-value"><span id="nVolt">--</span></div></div>
       <div class="num-card"><div class="num-label">Current</div><div class="num-value"><span id="nCur">--</span></div></div>
@@ -342,17 +340,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
       <div class="num-card"><div class="num-label">Freq</div><div class="num-value"><span id="nHz">--</span></div></div>
       <div class="num-card"><div class="num-label">PF</div><div class="num-value"><span id="nPF">--</span></div><div id="pfHint" style="display:none;font-size:10px;color:#94a3b8;margin-top:2px">load &gt; 0.5A</div></div>
     </div>
-    <div class="hint" id="dashMeterHint" style="display:none">Power meter not detected — turn on TEST MODE in Settings to simulate readings.</div>
+    <div class="hint" id="dashMeterHint" style="display:none">No power meter. Enable test mode in Settings.</div>
   </div>
 
-  <div class="card"><h6>⚡ Power (W)</h6><div class="chart-box"><canvas id="chartPower"></canvas><div id="chFall1" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
-  <div class="card"><h6>⚡ Voltage (V)</h6><div class="chart-box"><canvas id="chartVoltage"></canvas><div id="chFall2" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
-  <div class="card"><h6>⚡ Current (A)</h6><div class="chart-box"><canvas id="chartCurrent"></canvas><div id="chFall3" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
+  <div class="card"><h6>Power (W)</h6><div class="chart-box"><canvas id="chartPower"></canvas><div id="chFall1" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
+  <div class="card"><h6>Voltage (V)</h6><div class="chart-box"><canvas id="chartVoltage"></canvas><div id="chFall2" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
+  <div class="card"><h6>Current (A)</h6><div class="chart-box"><canvas id="chartCurrent"></canvas><div id="chFall3" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
 
   <nav class="tab-bar">
     <a href="/"><svg viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>Control</a>
     <a href="/dashboard" class="active"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Dashboard</a>
-    <a href="/settings"><svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Settings</a>
+    <a href="/settings"><svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Settings</a>
     <a href="/data"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Data</a>
   </nav>
 </div>
@@ -369,7 +367,6 @@ if(typeof Chart==='undefined')for(const id of['chFall1','chFall2','chFall3']){co
 function makeChart(id,label,color){if(typeof Chart==='undefined')return null;return new Chart($(id),{type:'line',data:{labels:[],datasets:[{label,data:[],borderColor:color,backgroundColor:color+'22',fill:true,borderWidth:2,pointRadius:0,tension:.2}]},options:{animation:false,responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}})}
 chartPower=makeChart('chartPower','Power (W)','#3b82f6');chartVoltage=makeChart('chartVoltage','Voltage (V)','#f59e0b');chartCurrent=makeChart('chartCurrent','Current (A)','#22c55e');
 function pushChart(c,a,v,n){if(!c)return;a.push(v);if(a.length>n)a.shift();c.data.labels=a.map((_,i)=>i);c.data.datasets[0].data=a;c.update()}
-const TRIP_PLAIN={2:"Overload",4:"No Water",8:"High voltage",16:"Low voltage",64:"Sensor fault",128:"Failed start"};
 async function refresh(){try{const s=await(await fetch('/status')).json();$('testBanner').style.display=s.mock?'block':'none';
   if(s.pzemValid||s.mock){$('nVolt').textContent=s.voltage.toFixed(0)+' V';$('nCur').textContent=s.current.toFixed(1)+' A';$('nPow').textContent=s.power>=1000?(s.power/1000).toFixed(2)+' kW':s.power.toFixed(0)+' W';$('nHz').textContent=s.frequency.toFixed(1)+' Hz';$('nPF').textContent=s.current>.5?s.pf.toFixed(2):'--';$('pfHint').style.display=s.current>.5?'none':'block';$('nEn').textContent=s.energyKwh.toFixed(2)+' kWh'}
   else{$('nVolt').textContent='--';$('nCur').textContent='--';$('nPow').textContent='--';$('nHz').textContent='--';$('nPF').textContent='--';$('nEn').textContent='--';$('pfHint').style.display='none'}
@@ -379,9 +376,8 @@ async function refresh(){try{const s=await(await fetch('/status')).json();$('tes
   if(s.pumpState==='RUNNING'||s.pumpState==='TRIPPED'){pushChart(chartPower,series.power,s.power,100);pushChart(chartVoltage,series.voltage,s.voltage,100);pushChart(chartCurrent,series.current,s.current,100)}
   lastGoodTs=new Date();document.querySelector('.numerics').classList.remove('stale');$('lastUpd').textContent='last update '+lastGoodTs.toLocaleTimeString()
 }catch(e){$('lastUpd').textContent=lastGoodTs?'⚠ STALE — last '+lastGoodTs.toLocaleTimeString()+' · unreachable':'unreachable — retrying…';const n=document.querySelector('.numerics');if(n)n.classList.add('stale')}}
-function setPollActive(ms){const e=$('pollActive');if(e)e.textContent='('+ms/1000+'s)'}
-pollSel.addEventListener('change',()=>{clearInterval(window._ti);setPollActive(parseInt(pollSel.value));window._ti=setInterval(refresh,parseInt(pollSel.value))});
-setPollActive(parseInt(pollSel.value));window._ti=setInterval(refresh,parseInt(pollSel.value));refresh();
+pollSel.addEventListener('change',()=>{clearInterval(window._ti);window._ti=setInterval(refresh,parseInt(pollSel.value))});
+window._ti=setInterval(refresh,parseInt(pollSel.value));refresh();
 </script>
 </body>
 </html>
@@ -435,13 +431,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .check-row .ch-help{font-size:12px;color:#64748b;line-height:1.4}
 button.save{width:100%;padding:15px;background:linear-gradient(135deg,#3b82f6,#2563eb);color:#fff;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 14px rgba(59,130,246,.25);transition:all .15s}
 button.save:active{transform:scale(.98)}
-button.danger{background:linear-gradient(135deg,#ef4444,#dc2626);margin-top:20px;font-size:14px;padding:12px;box-shadow:0 4px 14px rgba(239,68,68,.25)}
 button.danger-arm{box-shadow:0 0 0 3px #fca5a5;animation:pulse-red 1s infinite;font-weight:700}
 @keyframes pulse-red{50%{opacity:.7}}
 .msg{min-height:20px;font-size:13px;font-weight:700;text-align:center;margin-top:8px}
 .msg.good{color:#16a34a}.msg.bad{color:#dc2626}
-.toast{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:100;background:#16a34a;color:#fff;padding:10px 18px;border-radius:10px;font-size:14px;font-weight:700;box-shadow:0 4px 14px rgba(0,0,0,.15);max-width:92vw;text-align:center}
-.toast.bad{background:#dc2626}
 .banner-test{background:#fef3c7;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:8px 12px;font-weight:600;font-size:12px;margin-bottom:12px;text-align:center}
 .tab-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #e2e8f0;z-index:10;box-shadow:0 -2px 10px rgba(0,0,0,.04);padding-bottom:env(safe-area-inset-bottom,0)}
 .tab-bar a{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 0 8px;text-decoration:none;color:#94a3b8;font-size:10px;font-weight:600;gap:3px;position:relative;transition:color .15s}
@@ -449,7 +442,6 @@ button.danger-arm{box-shadow:0 0 0 3px #fca5a5;animation:pulse-red 1s infinite;f
 .tab-bar a.active::before{content:'';position:absolute;top:0;left:25%;right:25%;height:2px;background:#3b82f6;border-radius:0 0 2px 2px}
 .tab-bar a:active{opacity:.7}
 .tab-bar svg{width:20px;height:20px;stroke-width:2;stroke:currentColor;fill:none;flex-shrink:0}
-.range-hint{display:inline-block;margin-top:4px;font-size:11px;font-weight:600;color:#64748b;background:#f1f5f9;border-radius:6px;padding:1px 6px}
 .offline-toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#b45309;color:#fff;padding:6px 14px;border-radius:10px;font-size:11px;font-weight:700;z-index:99;display:none;box-shadow:0 4px 12px rgba(0,0,0,.2)}
 </style>
 </head>
@@ -462,7 +454,7 @@ button.danger-arm{box-shadow:0 0 0 3px #fca5a5;animation:pulse-red 1s infinite;f
     <div class="sec-hdr" onclick="toggleSec('secBasic')">
       <div class="sec-left">
         <div class="sec-icon" style="background:#dcfce7;color:#166534">⚡</div>
-        <div><div class="sec-title">Basic Settings</div><div class="sec-sub">Protections &amp; test mode</div></div>
+        <div><div class="sec-title">Basic Settings</div><div class="sec-sub">Protections &amp; test</div></div>
       </div>
       <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6,9 12,15 18,9"/></svg>
     </div>
@@ -470,20 +462,20 @@ button.danger-arm{box-shadow:0 0 0 3px #fca5a5;animation:pulse-red 1s infinite;f
 
       <div class="card" id="testCard">
         <h3>🧪 Test Mode</h3>
-        <p class="cardhelp">Test protections without the real power meter.</p>
+        <p class="cardhelp">Simulate meter readings for testing protections.</p>
         <div class="field"><label><input type="checkbox" id="cMock" style="width:auto;height:auto;transform:scale(1.3);margin-right:8px;vertical-align:middle"> Use test readings</label></div>
-        <div class="field"><label for="cMockProfile">Scenario</label><p class="help">Choose what fake reading the controller should receive.</p><div id="mockProfileHint" style="display:none;font-size:11px;color:#64748b">Turn on "Use test readings" above first.</div><select id="cMockProfile" disabled><option value="off">Pump off</option><option value="running">Running normally</option><option value="dryrun">Dry run</option><option value="oc">Overload</option></select></div>
+        <div class="field"><label for="cMockProfile">Scenario</label><p class="help">Simulated scenario for the power meter.</p><div id="mockProfileHint" style="display:none;font-size:11px;color:#64748b">Turn on "Use test readings" above first.</div><select id="cMockProfile" disabled><option value="off">Pump off</option><option value="running">Running normally</option><option value="dryrun">Dry run</option><option value="oc">Overload</option></select></div>
       </div>
 
       <div class="card"><h3>🛡 Overload Protection</h3><p class="cardhelp">Stops the pump when the motor draws too much current.</p>
-        <div class="field"><label for="ocRunning">Normal current limit (A)</label><p class="help">Highest normal current. If exceeded for the delay, pump stops.</p><input type="number" id="ocRunning" step="0.1" min="5" max="50"><div class="unit-hint">e.g. 9.6A pump → set 12A</div></div>
+        <div class="field"><label for="ocRunning">Normal current limit (A)</label><p class="help">Pump stops if current exceeds this for the delay period.</p><input type="number" id="ocRunning" step="0.1" min="5" max="50"><div class="unit-hint">e.g. 9.6A pump → set 12A</div></div>
         <div class="field"><label for="ocStartInstant">Start-up current limit (A)</label><p class="help">Instant spike threshold during start-up.</p><input type="number" id="ocStartInstant" min="20" max="100"></div>
         <div class="field"><label for="ocDelay">Confirm delay (s)</label><p class="help">Overload must last this long before stopping.</p><input type="number" id="ocDelay" min="1" max="30"></div>
       </div>
 
       <div class="card"><h3>💧 No-Water Protection</h3><p class="cardhelp">Stops the pump when it runs dry.</p>
-        <div class="field"><label for="dryRunCurrent">No-water current (A)</label><input type="number" id="dryRunCurrent" step="0.1" min="1" max="10"></div>
-        <div class="field"><label for="dryRunPower">No-water power (W)</label><p class="help">Both current AND power must be low.</p><input type="number" id="dryRunPower" min="100" max="2000"></div>
+        <div class="field"><label for="dryRunCurrent">Dry-run current (A)</label><input type="number" id="dryRunCurrent" step="0.1" min="1" max="10"></div>
+        <div class="field"><label for="dryRunPower">Dry-run power (W)</label><p class="help">Both current AND power must be low.</p><input type="number" id="dryRunPower" min="100" max="2000"></div>
         <div class="field"><label for="dryRunDelay">Confirm delay (s)</label><input type="number" id="dryRunDelay" min="1" max="300"></div>
         <div class="field"><label for="dryRunActivation">Wait after start (s)</label><p class="help">Protection activates after this delay.</p><input type="number" id="dryRunActivation" min="0" max="3600"></div>
       </div>
@@ -491,10 +483,10 @@ button.danger-arm{box-shadow:0 0 0 3px #fca5a5;animation:pulse-red 1s infinite;f
       <div class="card"><h3>⚡ Voltage Protection</h3><p class="cardhelp">Stops the pump on dangerous mains voltage.</p>
         <div class="field"><label for="voltOver">Over-voltage trip (V)</label><input type="number" id="voltOver" min="200" max="280"></div>
         <div class="field"><label for="voltUnder">Under-voltage stop (V)</label><input type="number" id="voltUnder" min="150" max="230"></div>
-        <div class="field"><label for="voltWarn">Pre-start warning (V)</label><input type="number" id="voltWarn" min="240" max="280"></div>
-        <div class="field"><label for="voltCritical">Start block (V)</label><input type="number" id="voltCritical" min="250" max="300"></div>
+        <div class="field"><label for="voltWarn">Warning voltage (V)</label><input type="number" id="voltWarn" min="240" max="280"></div>
+        <div class="field"><label for="voltCritical">Critical voltage (V)</label><input type="number" id="voltCritical" min="250" max="300"></div>
         <div class="field"><label for="voltageDelay">Confirm delay (s)</label><input type="number" id="voltageDelay" min="1" max="60"></div>
-        <div class="field"><label for="voltageLockout">Lockout after trip (s)</label><input type="number" id="voltageLockout" min="0" max="3600"></div>
+        <div class="field"><label for="voltageLockout">Voltage lockout (s)</label><input type="number" id="voltageLockout" min="0" max="3600"></div>
       </div>
 
     </div></div>
@@ -511,14 +503,14 @@ button.danger-arm{box-shadow:0 0 0 3px #fca5a5;animation:pulse-red 1s infinite;f
     <div class="sec-body"><div class="sec-inner">
 
       <div class="card"><h3>🔌 Starting &amp; Stopping</h3><p class="cardhelp">Start confirmation and min run/off times.</p>
-        <div class="field"><label for="startSuccessCurrent">Start success current (A)</label><input type="number" id="startSuccessCurrent" step="0.1" min="0.5" max="5"></div>
-        <div class="field"><label for="startVerifyDelay">Verify delay (s)</label><input type="number" id="startVerifyDelay" min="1" max="10"></div>
-        <div class="field"><label for="startFailBlock">Failure retry block (s)</label><input type="number" id="startFailBlock" min="1" max="600"></div>
+        <div class="field"><label for="startSuccessCurrent">Min run current (A)</label><input type="number" id="startSuccessCurrent" step="0.1" min="0.5" max="5"></div>
+        <div class="field"><label for="startVerifyDelay">Start verify delay (s)</label><input type="number" id="startVerifyDelay" min="1" max="10"></div>
+        <div class="field"><label for="startFailBlock">Start-fail lockout (s)</label><input type="number" id="startFailBlock" min="1" max="600"></div>
         <div class="field"><label for="minRun">Minimum run (s)</label><input type="number" id="minRun" min="10" max="300"></div>
         <div class="field"><label for="minOff">Minimum off (s)</label><input type="number" id="minOff" min="10" max="600"></div>
       </div>
 
-      <div class="card"><h3>🔁 Auto Restart</h3><p class="cardhelp">Auto-restart after a safety trip. 3 quick repeats = permanent lockout.</p>
+      <div class="card"><h3>🔁 Auto Restart</h3><p class="cardhelp">3 fast repeats = permanent lockout (manual reset only).</p>
         <div class="field"><label for="autoRetryDelay">Retry delay (s)</label><input type="number" id="autoRetryDelay" min="60" max="3600"></div>
         <div class="field"><label for="maxRetries">Max retries</label><input type="number" id="maxRetries" min="1" max="10"></div>
         <div class="check-row"><input type="checkbox" id="tb0"><div><div class="ch-label">Auto-retry after overload</div><div class="ch-help">Recommended for brief blockages.</div></div></div>
@@ -565,7 +557,6 @@ const fields=['ocRunning','ocStartInstant','ocDelay','dryRunCurrent','dryRunPowe
   'voltOver','voltUnder','voltWarn','voltCritical','voltageDelay','voltageLockout',
   'startSuccessCurrent','startVerifyDelay','startFailBlock','minRun','minOff',
   'autoRetryDelay','maxRetries','logIntervalRunning','logIntervalOff','pzemReadRunning'];
-(function(){fields.forEach(f=>{const el=$(f);if(!el||!el.min||el.min===''&&el.max==='')return;const lab=el.closest('.field')&&el.closest('.field').querySelector('label');if(!lab||lab.querySelector('.range-hint'))return;const r=document.createElement('span');r.className='range-hint';r.textContent='range '+el.min+'–'+el.max;lab.appendChild(r)})})();
 function syncMockUI(){$('cMockProfile').disabled=!$('cMock').checked;$('cMockProfile').closest('.field').style.opacity=$('cMock').checked?1:.55;$('mockProfileHint').style.display=$('cMock').checked?'none':'block'}
 async function load(){const s=await(await fetch('/settings/api')).json();$('testBanner').style.display=s.mock?'block':'none';$('cMock').checked=s.mock;syncMockUI();fields.forEach(f=>{if($(f))$(f).value=s[f]});
   $('tb0').checked=!!(s.tripBehavior&1);$('tb1').checked=!!(s.tripBehavior&2);$('tb2').checked=!!(s.tripBehavior&4);$('tb3').checked=!!(s.tripBehavior&8);$('tb4').checked=!!(s.tripBehavior&16);$('tb5').checked=!!(s.tripBehavior&32)}
@@ -624,8 +615,6 @@ th{background:#f8fafc;color:#64748b;text-transform:uppercase;font-size:10px;font
 .chip-fault{background:#fee2e2;color:#991b1b}
 .chip-auto{background:#dbeafe;color:#1e40af}
 .chip-off{background:#f1f5f9;color:#475569}
-.details{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
-.details span{font-size:11px;background:#f8fafc;border:1px solid #e2e8f0;padding:4px 8px;border-radius:8px;color:#475569}
 .tab-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #e2e8f0;z-index:10;box-shadow:0 -2px 10px rgba(0,0,0,.04);padding-bottom:env(safe-area-inset-bottom,0)}
 .tab-bar a{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 0 8px;text-decoration:none;color:#94a3b8;font-size:10px;font-weight:600;gap:3px;position:relative;transition:color .15s}
 .tab-bar a.active{color:#3b82f6}
@@ -639,11 +628,11 @@ th{background:#f8fafc;color:#64748b;text-transform:uppercase;font-size:10px;font
 <body>
 <div class="container">
   <div class="hdr"><div class="hdr-logo">📋</div><h1>Pump History</h1></div>
-  <div id="testBanner" class="banner-test" style="display:none">🧪 TEST MODE — log contains simulated readings.</div>
+  <div id="testBanner" class="banner-test" style="display:none">🧪 TEST MODE</div>
 
   <div class="card">
     <h3>Recorded readings</h3>
-    <p class="cardhelp">One row per measurement. Newest first; LOAD MORE adds 100 older rows.</p>
+    <p class="cardhelp">Newest first. LOAD MORE adds 100 rows.</p>
     <div class="summary" id="summary">Loading…</div>
     <div style="overflow-x:auto">
     <table>
@@ -655,19 +644,12 @@ th{background:#f8fafc;color:#64748b;text-transform:uppercase;font-size:10px;font
     <button class="load-more" id="loadMore">⬇ LOAD MORE</button>
     <div id="loadErr" class="msg bad" style="display:none"></div>
     <div id="loadOk" class="msg good" style="display:none"></div>
-    <div class="details">
-      <span><b>Session</b> — power-on count</span>
-      <span><b>Time</b> — seconds since power-on</span>
-      <span><b>Used</b> — energy since previous row</span>
-      <span><b>PF</b> — 0.5–1.0 efficiency</span>
-      <span><b>Status</b> — pump state</span>
-    </div>
   </div>
 
   <nav class="tab-bar">
     <a href="/"><svg viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>Control</a>
     <a href="/dashboard"><svg viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Dashboard</a>
-    <a href="/settings"><svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Settings</a>
+    <a href="/settings"><svg viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="17" y1="16" x2="23" y2="16"/></svg>Settings</a>
     <a href="/data" class="active"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Data</a>
   </nav>
 </div>
