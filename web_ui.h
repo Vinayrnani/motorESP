@@ -205,10 +205,22 @@ $('btnStop').onclick=()=>doAct('stop');
 $('btnReset').onclick=()=>{if(confirm('Reset the safety stop and unlock the pump?'))doAct('reset')};
 
 function fmtCountdown(sec){if(!sec||sec<=0)return'not scheduled';const m=Math.floor(sec/60),s=sec%60;return(m?m+'m ':'')+s+'s'}
+let S={},pollTime=0;
+function calcTimers(o){
+  const now=o.sMs||0;
+  o.minRunLeft=o.minRunEnd>0?Math.max(0,Math.ceil((o.minRunEnd-now)/1000)):0;
+  o.minOffLeft=o.minOffEnd>0?Math.max(0,Math.ceil((o.minOffEnd-now)/1000)):0;
+  o.startFailBlock=o.sfBlockEnd>0?Math.max(0,Math.ceil((o.sfBlockEnd-now)/1000)):0;
+  o.voltageLockLeft=o.vLockEnd>0?Math.max(0,Math.ceil((o.vLockEnd-now)/1000)):0;
+  o.autoRetryIn=o.arAt>0?Math.max(0,Math.ceil((o.arAt-now)/1000)):0;
+  o.maxRunTimeLeft=o.maxRunTimeEnd>0?Math.max(0,Math.ceil((o.maxRunTimeEnd-now)/1000)):0;
+  return o;
+}
 
 async function refresh(){
   try{
     const s=await(await fetch('/status')).json();
+    S=s;pollTime=Date.now();calcTimers(s);
     $('subLine').textContent='v'+s.version+(s.mock?' · TEST':' · '+(s.rssi>-80?'ok':'weak'));
     $('testBanner').classList.toggle('on',s.mock);
     if(s.pzemValid||s.mock){$('stVolt').textContent=s.voltage.toFixed(0)+' V';$('stCur').textContent=s.current.toFixed(1)+' A';$('stPow').textContent=s.power>=1000?(s.power/1000).toFixed(2)+' kW':s.power.toFixed(0)+' W'}
@@ -229,22 +241,8 @@ async function refresh(){
     else{big.className='hero-status stop';big.textContent='STOPPED';wrap.className='hero ring-stop';icon.textContent='⏸';
       plain.textContent=s.maxRunTimeStop?'Stopped: max run time reached.':(!s.pzemValid&&!s.mock)?'Pump is idle. Enable test mode in Settings.':'Pump is idle.'}
 
-    const tags=[];
-    if(s.scheduleActive)tags.push('<span class="hero-tag ht-sch">⏰ Schedule</span>');
-    if(s.tripBehavior)tags.push('<span class="hero-tag ht-retry">🔁 Auto Retry</span>');
-    if(s.maxRunTimeStop)tags.push('<span class="hero-tag ht-maxrun">⏱ Max Run Time</span>');
-    else if(s.maxRunTime>0&&s.maxRunTimeLeft>0&&(s.pumpState==='RUNNING'||s.pumpState==='STARTING'))tags.push('<span class="hero-tag ht-maxrun">⏱ '+fmtCountdown(s.maxRunTimeLeft)+'</span>');
-    $('heroTags').innerHTML=tags.join('');
-
-    const rp=$('reasonPanel');
-    if(s.trips||s.permanentLockout||s.autoRetryIn>0){rp.classList.add('on');
-      const names=(s.tripNames||'NONE').split('|').filter(n=>n!=='NONE');
-      $('reasonBanner').className='reason-banner '+(s.permanentLockout?'rb-danger':'rb-warn');
-      $('reasonBanner').textContent=names.length?('Reason: '+names.map(n=>TRIP_PLAIN[n]||n).join('; ')+(s.permanentLockout?' — LOCKOUT':'')):(s.permanentLockout?'PERMANENT LOCKOUT — press RESET after fixing the fault.':'');
-      $('detRetry').textContent=fmtCountdown(s.autoRetryIn);$('detRetriesUsed').textContent=s.retryCount+' of '+s.maxRetries;
-      $('detFast').textContent=s.fastFaultCount+' of '+s.maxFastFaults;$('detBlockedLbl').textContent='Start blocked';
-      $('detBlocked').textContent=s.startFailBlock>0?fmtCountdown(s.startFailBlock)+' (start-fail)':'not blocked'}
-    else{rp.classList.remove('on')}
+    updateHeroTags(s);
+    updateReasonPanel(s);
 
     setPowerUI(s);refreshButtons(s);
   }catch(e){$('statusPlain').textContent='Cannot reach the controller — retrying…';setBtn($('btnStart'),true,'NO CONNECTION','');setBtn($('btnStop'),true,'NO CONNECTION','')}
@@ -273,7 +271,33 @@ function refreshButtons(s){
   setBtn($('btnStop'),stopDisabled,stopMsg,stopCnt);
   setBtn($('btnReset'),!(tripped||s.trips||s.permanentLockout),'RESET','');
 }
-setInterval(refresh,3000);refresh();
+function updateHeroTags(s){
+  const tags=[];
+  if(s.scheduleActive)tags.push('<span class="hero-tag ht-sch">⏰ Schedule</span>');
+  if(s.tripBehavior)tags.push('<span class="hero-tag ht-retry">🔁 Auto Retry</span>');
+  if(s.maxRunTimeStop)tags.push('<span class="hero-tag ht-maxrun">⏱ Max Run Time</span>');
+  else if(s.maxRunTime>0&&s.maxRunTimeLeft>0&&(s.pumpState==='RUNNING'||s.pumpState==='STARTING'))tags.push('<span class="hero-tag ht-maxrun">⏱ '+fmtCountdown(s.maxRunTimeLeft)+'</span>');
+  $('heroTags').innerHTML=tags.join('');
+}
+function updateReasonPanel(s){
+  const rp=$('reasonPanel');
+  if(s.trips||s.permanentLockout||s.autoRetryIn>0){rp.classList.add('on');
+    const names=(s.tripNames||'NONE').split('|').filter(n=>n!=='NONE');
+    $('reasonBanner').className='reason-banner '+(s.permanentLockout?'rb-danger':'rb-warn');
+    $('reasonBanner').textContent=names.length?('Reason: '+names.map(n=>TRIP_PLAIN[n]||n).join('; ')+(s.permanentLockout?' — LOCKOUT':'')):(s.permanentLockout?'PERMANENT LOCKOUT — press RESET after fixing the fault.':'');
+    $('detRetry').textContent=fmtCountdown(s.autoRetryIn);$('detRetriesUsed').textContent=s.retryCount+' of '+s.maxRetries;
+    $('detFast').textContent=s.fastFaultCount+' of '+s.maxFastFaults;$('detBlockedLbl').textContent='Start blocked';
+    $('detBlocked').textContent=s.startFailBlock>0?fmtCountdown(s.startFailBlock)+' (start-fail)':'not blocked'}
+  else{rp.classList.remove('on')}
+}
+function tickLocal(){
+  if(!S.sMs)return;
+  const L=Object.assign({},S);
+  L.sMs=S.sMs+(Date.now()-pollTime);
+  calcTimers(L);
+  refreshButtons(L);updateHeroTags(L);updateReasonPanel(L);
+}
+setInterval(refresh,3000);refresh();setInterval(tickLocal,1000);
 </script>
 </body>
 </html>
@@ -291,7 +315,8 @@ const char DASHBOARD_HTML[] PROGMEM = R"rawliteral(
 <title>motorESP - Dashboard</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E💧%3C/text%3E%3C/svg%3E">
 <script src="/lib/chartjs/chart.umd.min.js"></script>
-<script src="/lib/dexie/dexie.min.js"></script>
+<script src="/lib/hammerjs/hammer.min.js"></script>
+<script src="/lib/chartjs-plugin-zoom/chartjs-plugin-zoom.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f1f5f9;color:#0f172a}
@@ -315,7 +340,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .badge-running{background:#dcfce7;color:#166534}
 .badge-stopped{background:#f1f5f9;color:#475569}
 .badge-tripped{background:#fee2e2;color:#991b1b}
-.chart-box{height:220px;position:relative}
+.chart-box{height:350px;position:relative}
 .voltage-status{padding:4px 10px;border-radius:12px;font-weight:700;font-size:11px}
 .vs-normal{background:#dcfce7;color:#166534}
 .vs-none{background:#f1f5f9;color:#64748b}
@@ -330,6 +355,14 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 .tab-bar a:active{opacity:.7}
 .tab-bar svg{width:20px;height:20px;stroke-width:2;stroke:currentColor;fill:none;flex-shrink:0}
 .offline-toast{position:fixed;top:12px;left:50%;transform:translateX(-50%);background:#b45309;color:#fff;padding:6px 14px;border-radius:10px;font-size:11px;font-weight:700;z-index:99;display:none;box-shadow:0 4px 12px rgba(0,0,0,.2)}
+.boot-row{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.boot-row select{flex:1;padding:8px 10px;border:1px solid #e2e8f0;border-radius:10px;font-size:13px;background:#fff}
+.boot-row button{padding:8px 12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;font-size:13px;cursor:pointer;white-space:nowrap;color:#475569}
+.boot-row button:active{background:#f1f5f9}
+.chart-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.chart-hdr h6{margin:0}
+.chart-hdr button{padding:4px 10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;font-size:11px;cursor:pointer;color:#475569}
+.chart-label{font-size:10px;color:#64748b;text-align:center;margin-top:4px}
 </style>
 </head>
 <body>
@@ -367,9 +400,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
     <div class="hint" id="dashMeterHint" style="display:none">No power meter. Enable test mode in Settings.</div>
   </div>
 
-  <div class="card"><h6>Power (W)</h6><div class="chart-box"><canvas id="chartPower"></canvas><div id="chFall1" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
-  <div class="card"><h6>Voltage (V)</h6><div class="chart-box"><canvas id="chartVoltage"></canvas><div id="chFall2" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
-  <div class="card"><h6>Current (A)</h6><div class="chart-box"><canvas id="chartCurrent"></canvas><div id="chFall3" style="display:none;color:#64748b;font-size:12px;padding:8px">Chart library failed to load.</div></div></div>
+  <div class="card">
+    <div class="boot-row">
+      <select id="bootSel"><option value="0">Current boot</option></select>
+      <button onclick="loadBootData()">Load</button>
+    </div>
+    <div class="chart-hdr"><h6>Power &amp; Current</h6><button onclick="chartMain&&chartMain.resetZoom()">Reset zoom</button></div>
+    <div class="chart-box"><canvas id="chartMain"></canvas></div>
+    <div class="chart-label" id="chartLabel">Loading…</div>
+  </div>
 
   <nav class="tab-bar">
     <a href="/"><svg viewBox="0 0 24 24"><path d="M12 2.69l5.66 5.66a8 8 0 11-11.31 0z"/></svg>Control</a>
@@ -385,23 +424,138 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;b
 const $=id=>document.getElementById(id);
 let _offlineEl=null,_offlineT=null;
 (function(){_offlineEl=$('offlineToast');const of=window.fetch;window.fetch=function(){const p=of.apply(this,arguments);p.then(()=>{if(_offlineEl)_offlineEl.style.display='none';if(_offlineT){clearTimeout(_offlineT);_offlineT=null}}).catch(()=>{if(_offlineEl){_offlineEl.style.display='block';if(_offlineT)clearTimeout(_offlineT);_offlineT=setTimeout(()=>{if(_offlineEl)_offlineEl.style.display='none'},8000)}});return p}})();
+
+function hexToBytes(h){const b=[];for(let i=0;i<h.length;i+=2)b.push(parseInt(h.substr(i,2),16));return b}
+
 const pollSel=$('pollSel');
-let series={power:[],voltage:[],current:[]},lastGoodTs=null,chartPower,chartVoltage,chartCurrent;
-if(typeof Chart==='undefined')for(const id of['chFall1','chFall2','chFall3']){const el=$(id);if(el)el.style.display='block'}
-function makeChart(id,label,color){if(typeof Chart==='undefined')return null;return new Chart($(id),{type:'line',data:{labels:[],datasets:[{label,data:[],borderColor:color,backgroundColor:color+'22',fill:true,borderWidth:2,pointRadius:0,tension:.2}]},options:{animation:false,responsive:true,maintainAspectRatio:false,scales:{y:{beginAtZero:true}}}})}
-chartPower=makeChart('chartPower','Power (W)','#3b82f6');chartVoltage=makeChart('chartVoltage','Voltage (V)','#f59e0b');chartCurrent=makeChart('chartCurrent','Current (A)','#22c55e');
-function pushChart(c,a,v,n){if(!c)return;a.push(v);if(a.length>n)a.shift();c.data.labels=a.map((_,i)=>i);c.data.datasets[0].data=a;c.update()}
-async function refresh(){try{const s=await(await fetch('/status')).json();$('testBanner').style.display=s.mock?'block':'none';
-  if(s.pzemValid||s.mock){$('nVolt').textContent=s.voltage.toFixed(0)+' V';$('nCur').textContent=s.current.toFixed(1)+' A';$('nPow').textContent=s.power>=1000?(s.power/1000).toFixed(2)+' kW':s.power.toFixed(0)+' W';$('nHz').textContent=s.frequency.toFixed(1)+' Hz';$('nPF').textContent=s.current>.5?s.pf.toFixed(2):'--';$('pfHint').style.display=s.current>.5?'none':'block';$('nEn').textContent=s.energyKwh.toFixed(2)+' kWh'}
-  else{$('nVolt').textContent='--';$('nCur').textContent='--';$('nPow').textContent='--';$('nHz').textContent='--';$('nPF').textContent='--';$('nEn').textContent='--';$('pfHint').style.display='none'}
-  $('uptime').textContent=s.uptime;const b=$('stateBadge');b.className='badge '+(s.pumpState==='RUNNING'?'badge-running':(s.pumpState==='TRIPPED'?'badge-tripped':'badge-stopped'));b.textContent=s.pumpState;$('tripBadge').style.display=s.trips?'inline-block':'none';
-  const vs=$('voltageStatus');if(!s.pzemValid&&!s.mock){vs.className='voltage-status vs-none';vs.textContent='METER OFFLINE'}else{vs.className='voltage-status '+({NORMAL:'vs-normal',WARNING:'vs-warning',CRITICAL:'vs-critical'}[s.voltageStatus]||'vs-normal');vs.textContent={NORMAL:'VOLTAGE OK',WARNING:'VOLTAGE HIGH',CRITICAL:'VOLTAGE CRITICAL'}[s.voltageStatus]||s.voltageStatus}
-  $('dashMeterHint').style.display=(!s.pzemValid&&!s.mock)?'block':'none';
-  if(s.pumpState==='RUNNING'||s.pumpState==='TRIPPED'){pushChart(chartPower,series.power,s.power,100);pushChart(chartVoltage,series.voltage,s.voltage,100);pushChart(chartCurrent,series.current,s.current,100)}
-  lastGoodTs=new Date();document.querySelector('.numerics').classList.remove('stale');$('lastUpd').textContent='last update '+lastGoodTs.toLocaleTimeString()
-}catch(e){$('lastUpd').textContent=lastGoodTs?'⚠ STALE — last '+lastGoodTs.toLocaleTimeString()+' · unreachable':'unreachable — retrying…';const n=document.querySelector('.numerics');if(n)n.classList.add('stale')}}
+let chartMain,selectedBoot=0,livePower=[],liveCurrent=[],liveTimestamps=[];
+
+function createChart(){
+  if(typeof Chart==='undefined')return null;
+  return new Chart($('chartMain'),{type:'line',data:{labels:[],datasets:[
+    {label:'Power (W)',data:[],borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.12)',fill:true,borderWidth:2,pointRadius:0,tension:.3,yAxisID:'yPower',order:2},
+    {label:'Current (A)',data:[],borderColor:'#22c55e',backgroundColor:'transparent',fill:false,borderWidth:2,pointRadius:0,tension:.3,yAxisID:'yCurrent',order:1}
+  ]},options:{animation:false,responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
+    plugins:{legend:{position:'top',labels:{boxWidth:12,padding:12,font:{size:11,weight:'600'}}},
+      tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+c.parsed.y.toFixed(c.datasetIndex===0?0:2)}}},
+      zoom:{pan:{enabled:true,mode:'x'},zoom:{wheel:{enabled:true},pinch:{enabled:true},drag:{enabled:false},mode:'x'}}},
+    scales:{x:{display:true, ticks:{maxRotation:45,font:{size:9},maxTicksLimit:10,autoSkip:true}},
+      yPower:{type:'linear',position:'left',beginAtZero:true,title:{display:true,text:'Power (W)',font:{size:10}},grid:{color:'rgba(0,0,0,.05)'},ticks:{font:{size:10}}},
+      yCurrent:{type:'linear',position:'right',beginAtZero:true,title:{display:true,text:'Current (A)',font:{size:10}},grid:{drawOnChartArea:false},ticks:{font:{size:10}}}}}});
+}
+chartMain=createChart();
+
+function updateChart(powers,currents,label,timestamps){
+  if(!chartMain)return;
+  const n=Math.max(powers.length,currents.length);
+  const labels=timestamps?timestamps.map(t=>{const d=new Date(t);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')}):Array.from({length:n},(_,i)=>i);
+  chartMain.data.labels=labels;
+  chartMain.data.datasets[0].data=powers;
+  chartMain.data.datasets[1].data=currents;
+  chartMain.update('none');
+  if($('chartLabel'))$('chartLabel').textContent=label||'';
+}
+
+function decodeLogs(hex,bootFilter){
+  const raw=hexToBytes(hex),powers=[],currents=[];
+  for(let i=0;i+11<=raw.length;i+=11){
+    const b=raw.slice(i,i+11);
+    const boot=b[10];
+    if(bootFilter!==undefined&&boot!==bootFilter)continue;
+    const t=b[0]|(b[1]<<8)|(b[2]<<16)|(b[3]<<24);
+    const v=200+b[4];
+    const a=(b[5]|(b[6]<<8))/10;
+    const pf=b[8];
+    if(pf>=254)continue;
+    powers.push(Math.round(v*a));
+    currents.push(parseFloat(a.toFixed(1)));
+  }
+  return{powers,currents};
+}
+
+async function fetchBootLogs(bootId,count,bootStartMs){
+  let all=[],cursorT=0;
+  for(let page=0;page<30;page++){
+    let url='/data/api?count='+count+'&dir=fromboot&boot='+bootId;
+    if(cursorT>0)url+='&time='+cursorT;
+    const d=await(await fetch(url)).json();
+    if(!d.logs||!d.sentCount)break;
+    const raw=hexToBytes(d.logs);
+    let lastT=0,matched=0;
+    for(let i=0;i+11<=raw.length;i+=11){
+      const b=raw.slice(i,i+11);
+      const t=b[0]|(b[1]<<8)|(b[2]<<16)|(b[3]<<24);
+      const boot=b[10];
+      if(boot===bootId&&b[8]<254){all.push({t,b});matched++}
+      lastT=t;
+    }
+    cursorT=lastT;
+    if(d.sentCount<count||!matched)break;
+  }
+  all.sort((a,b)=>a.t-b.t);
+  const powers=[],currents=[],timestamps=[];
+  for(const e of all){
+    const v=200+e.b[4];
+    const a=(e.b[5]|(e.b[6]<<8))/10;
+    powers.push(Math.round(v*a));
+    currents.push(parseFloat(a.toFixed(1)));
+    if(bootStartMs)timestamps.push(bootStartMs+e.t*1000);
+  }
+  return{powers,currents,timestamps,total:all.length};
+}
+
+function fmtDur(s){if(!s)return'';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return(h?h+'h ':'')+m+'m'}
+function fmtWh(w){return w>=1000?(w/1000).toFixed(2)+' kWh':w+' Wh'}
+async function discoverBoots(){
+  try{
+    const d=await(await fetch('/data/boots')).json();
+    const sel=$('bootSel');
+    while(sel.options.length>1)sel.remove(1);
+    (d.boots||[]).slice().reverse().forEach(b=>{
+      const o=document.createElement('option');o.value=b.id;
+      o.textContent='Boot #'+b.id+' — '+fmtDur(b.duration)+' · '+fmtWh(b.totalWh);
+      sel.appendChild(o);
+    });
+  }catch(e){}
+}
+
+async function loadBootData(){
+  const sel=$('bootSel'),bootId=parseInt(sel.value);
+  if(!bootId){selectedBoot=0;livePower=[];liveCurrent=[];liveTimestamps=[];updateChart([],[],'Live — waiting for data…');return}
+  selectedBoot=bootId;
+  if($('chartLabel'))$('chartLabel').textContent='Loading boot #'+bootId+'…';
+  try{
+    const opt=[...sel.options].find(o=>o.value==bootId);
+    const durMs=(opt?opt.textContent.match(/(\d+)h\s*(\d+)m/):null)||[];
+    const h=parseInt(durMs[1])||0,m=parseInt(durMs[2])||0;
+    const bootDurMs=(h*3600+m*60)*1000;
+    const st=await(await fetch('/status')).json();
+    const serverNowMs=st.timeValid?st.timeUnix*1000:Date.now();
+    const bootStartMs=serverNowMs-bootDurMs;
+    const r=await fetchBootLogs(bootId,200,bootStartMs);
+    updateChart(r.powers,r.currents,'Boot #'+bootId+' — '+r.total+' entries, '+Math.round(r.powers[r.powers.length-1]||0)+' W last',r.timestamps);
+  }catch(e){if($('chartLabel'))$('chartLabel').textContent='Failed to load boot #'+bootId}
+}
+$('bootSel').addEventListener('change',loadBootData);
+
+async function refresh(){
+  try{
+    const s=await(await fetch('/status')).json();
+    $('testBanner').style.display=s.mock?'block':'none';
+    if(s.pzemValid||s.mock){$('nVolt').textContent=s.voltage.toFixed(0)+' V';$('nCur').textContent=s.current.toFixed(1)+' A';$('nPow').textContent=s.power>=1000?(s.power/1000).toFixed(2)+' kW':s.power.toFixed(0)+' W';$('nHz').textContent=s.frequency.toFixed(1)+' Hz';$('nPF').textContent=s.current>.5?s.pf.toFixed(2):'--';$('pfHint').style.display=s.current>.5?'none':'block';$('nEn').textContent=s.energyKwh.toFixed(2)+' kWh'}
+    else{$('nVolt').textContent='--';$('nCur').textContent='--';$('nPow').textContent='--';$('nHz').textContent='--';$('nPF').textContent='--';$('nEn').textContent='--';$('pfHint').style.display='none'}
+    $('uptime').textContent=s.uptime;const b=$('stateBadge');b.className='badge '+(s.pumpState==='RUNNING'?'badge-running':(s.pumpState==='TRIPPED'?'badge-tripped':'badge-stopped'));b.textContent=s.pumpState;$('tripBadge').style.display=s.trips?'inline-block':'none';
+    const vs=$('voltageStatus');if(!s.pzemValid&&!s.mock){vs.className='voltage-status vs-none';vs.textContent='METER OFFLINE'}else{vs.className='voltage-status '+({NORMAL:'vs-normal',WARNING:'vs-warning',CRITICAL:'vs-critical'}[s.voltageStatus]||'vs-normal');vs.textContent={NORMAL:'VOLTAGE OK',WARNING:'VOLTAGE HIGH',CRITICAL:'VOLTAGE CRITICAL'}[s.voltageStatus]||s.voltageStatus}
+    $('dashMeterHint').style.display=(!s.pzemValid&&!s.mock)?'block':'none';
+    if(!selectedBoot&&(s.pumpState==='RUNNING'||s.pumpState==='STARTING')){
+      livePower.push(Math.round(s.power));liveCurrent.push(s.current);liveTimestamps.push(Date.now());
+      if(livePower.length>200){livePower.shift();liveCurrent.shift();liveTimestamps.shift()}
+      updateChart(livePower,liveCurrent,'Live — '+livePower.length+' points',liveTimestamps);
+    }
+    lastGoodTs=new Date();document.querySelector('.numerics').classList.remove('stale');$('lastUpd').textContent='last update '+lastGoodTs.toLocaleTimeString()
+  }catch(e){$('lastUpd').textContent=lastGoodTs?'⚠ STALE — last '+lastGoodTs.toLocaleTimeString()+' · unreachable':'unreachable — retrying…';const n=document.querySelector('.numerics');if(n)n.classList.add('stale')}}
 pollSel.addEventListener('change',()=>{clearInterval(window._ti);window._ti=setInterval(refresh,parseInt(pollSel.value))});
-window._ti=setInterval(refresh,parseInt(pollSel.value));refresh();
+window._ti=setInterval(refresh,parseInt(pollSel.value));refresh();discoverBoots();
 </script>
 </body>
 </html>
@@ -782,13 +936,13 @@ let _offlineEl=null,_offlineT=null;
 let sinceBoot=0,sinceTime=0;const RUN=1,OC=2,DRY=4,OV=8,UV=16,AUTO=32,PZEM=64,SFAIL=128;
 function hexToBytes(h){const a=[];for(let i=0;i<h.length;i+=2)a.push(parseInt(h.substr(i,2),16));return a}
 function chips(st){const c=[];if(st&RUN)c.push('<span class="chip chip-run">RUNNING</span>');if(st&OC)c.push('<span class="chip chip-fault">OVERLOAD</span>');if(st&DRY)c.push('<span class="chip chip-fault">NO WATER</span>');if(st&OV)c.push('<span class="chip chip-fault">HIGH V</span>');if(st&UV)c.push('<span class="chip chip-fault">LOW V</span>');if(st&PZEM)c.push('<span class="chip chip-fault">PZEM</span>');if(st&SFAIL)c.push('<span class="chip chip-fault">START FAIL</span>');if(st&AUTO)c.push('<span class="chip chip-auto">AUTO</span>');if(!c.length)c.push('<span class="chip chip-off">OFF</span>');return'<span class="bits">'+c.join('')+'</span>'}
-async function loadMore(){const btn=$('loadMore'),errEl=$('loadErr');btn.disabled=true;btn.textContent='Loading…';if(errEl)errEl.style.display='none';let url='/data/api?count=100';if(sinceBoot||sinceTime)url+='&boot='+sinceBoot+'&time='+sinceTime;let d;try{d=await(await fetch(url)).json()}catch(e){btn.disabled=false;btn.textContent='⬇ LOAD MORE';if(errEl){errEl.style.display='block';errEl.textContent='Could not load — check connection.'}return}
+async function loadMore(){const btn=$('loadMore'),errEl=$('loadErr');btn.disabled=true;btn.textContent='Loading…';if(errEl)errEl.style.display='none';let url='/data/api?count=100&dir=back';if(sinceBoot||sinceTime)url+='&boot='+sinceBoot+'&time='+sinceTime;let d;try{d=await(await fetch(url)).json()}catch(e){btn.disabled=false;btn.textContent='⬇ LOAD MORE';if(errEl){errEl.style.display='block';errEl.textContent='Could not load — check connection.'}return}
   btn.disabled=false;btn.textContent='⬇ LOAD MORE';if(sinceBoot===0&&sinceTime===0)$('rows').innerHTML='';const rows=hexToBytes(d.logs),tbody=$('rows');let added=0;
   for(let i=0;i+11<=rows.length;i+=11){const b=rows.slice(i,i+11),timeSec=b[0]|(b[1]<<8)|(b[2]<<16)|(b[3]<<24),volt=200+b[4],cur=((b[5]|(b[6]<<8))/10).toFixed(1),pf=b[8]>=254?'-':(b[8]/100).toFixed(2),st=b[9],boot=b[10];
     const tr=document.createElement('tr');tr.innerHTML='<td>'+boot+'</td><td>'+timeSec+'</td><td>'+volt+'</td><td>'+cur+'</td><td>'+b[7]+'</td><td>'+pf+'</td><td>'+chips(st)+'</td>';tbody.appendChild(tr);sinceBoot=boot;sinceTime=timeSec;added++}
   const okEl=$('loadOk');if(okEl){okEl.style.display='block';okEl.textContent=added>0?'✓ Loaded '+added+' row'+(added>1?'s':''):'✓ Up to date';clearTimeout(loadMore._okT);loadMore._okT=setTimeout(()=>{okEl.style.display='none'},4000)}
   if(added===0&&d.totalLogs===0){$('summary').textContent='No entries yet — saves automatically while running.'}
-  else{const shown=tbody.children.length,total=d.totalLogs;if(shown>=total){$('summary').textContent=total+' total · all '+shown+' shown';btn.disabled=true;btn.textContent='✓ All loaded'}
+  else{const shown=tbody.children.length,total=d.totalLogs;if(shown>=total||added===0){$('summary').textContent=total+' total · all '+shown+' shown';btn.disabled=true;btn.textContent='✓ All loaded'}
   else{const pct=total?Math.round(shown/total*100):0;btn.disabled=false;btn.textContent='⬇ LOAD MORE ('+shown+'/'+total+' · ~'+pct+'%)';$('summary').textContent=total+' total · '+shown+' shown (newest first)'}}
 }
 $('loadMore').onclick=loadMore;loadMore();

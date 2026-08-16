@@ -982,22 +982,15 @@ void handleStatus() {
     else if (pzem.voltage >= VOLT_WARN) voltageStatus = "WARNING";
   }
 
-  String autoRetryIn = "0";
-  if (pumpState == ST_TRIPPED && autoRetryAt != 0 && !permanentLockout) {
-    autoRetryIn = String(autoRetryAt > millis() ? (autoRetryAt - millis()) / 1000 : 0);
-  }
-
   unsigned long nowMs = millis();
-  unsigned long minOffLeft = 0;
-  if (lastStopTime != 0 && pumpState != ST_RUNNING && nowMs >= lastStopTime && (nowMs - lastStopTime) < MIN_OFF_TIME) {
-    minOffLeft = (MIN_OFF_TIME - (nowMs - lastStopTime)) / 1000;
-  }
-  unsigned long minRunLeft = 0;
+  unsigned long minRunEnd = 0;
   if (runStartTime != 0 && (pumpState == ST_RUNNING || pumpState == ST_STARTING) && nowMs >= runStartTime && (nowMs - runStartTime) < MIN_RUN_TIME) {
-    minRunLeft = (MIN_RUN_TIME - (nowMs - runStartTime)) / 1000;
+    minRunEnd = runStartTime + MIN_RUN_TIME;
   }
-  unsigned long voltageLockLeft = 0;
-  if (voltageLockUntil > nowMs) voltageLockLeft = (voltageLockUntil - nowMs) / 1000;
+  unsigned long minOffEnd = 0;
+  if (lastStopTime != 0 && pumpState != ST_RUNNING && nowMs >= lastStopTime && (nowMs - lastStopTime) < MIN_OFF_TIME) {
+    minOffEnd = lastStopTime + MIN_OFF_TIME;
+  }
 
   String json = "{\"voltage\":" + String(pzem.voltage) +
                 ",\"current\":" + String(pzem.current) +
@@ -1017,12 +1010,13 @@ void handleStatus() {
                 ",\"fastFaultCount\":" + String(fastFaultCount) +
                 ",\"maxRetries\":" + String(MAX_RETRIES) +
                 ",\"maxFastFaults\":" + String(MAX_FAST_FAULTS) +
-                ",\"autoRetryIn\":" + autoRetryIn +
                 ",\"voltageStatus\":\"" + voltageStatus + "\"" +
-                ",\"startFailBlock\":" + String(startFailBlockUntil > millis() ? (startFailBlockUntil - millis()) / 1000 : 0) +
-                ",\"minOffLeft\":" + String(minOffLeft) +
-                ",\"minRunLeft\":" + String(minRunLeft) +
-                ",\"voltageLockLeft\":" + String(voltageLockLeft) +
+                ",\"sMs\":" + String(nowMs) +
+                ",\"minRunEnd\":" + String(minRunEnd) +
+                ",\"minOffEnd\":" + String(minOffEnd) +
+                ",\"sfBlockEnd\":" + String(startFailBlockUntil > nowMs ? startFailBlockUntil : 0) +
+                ",\"vLockEnd\":" + String(voltageLockUntil > nowMs ? voltageLockUntil : 0) +
+                ",\"arAt\":" + String((pumpState == ST_TRIPPED && autoRetryAt != 0 && !permanentLockout && autoRetryAt > nowMs) ? autoRetryAt : 0) +
                 ",\"version\":\"" + FIRMWARE_VERSION + "\"" +
                 ",\"uptime\":\"" + uptimeStr + "\"" +
                 ",\"mock\":" + String(useMockPZEM ? 1 : 0) +
@@ -1044,11 +1038,24 @@ void handleStatus() {
                 ",\"timeUnix\":" + String(hasValidTime() ? (long)time(nullptr) : 0) +
                 ",\"tripBehavior\":" + String(tripBehavior) +
                 ",\"maxRunTime\":" + String(MAX_RUN_TIME / 1000) +
-                ",\"maxRunTimeLeft\":" + String(
+                ",\"maxRunTimeEnd\":" + String(
                   (pumpState == ST_RUNNING && MAX_RUN_TIME > 0 && (millis() - runStartTime) < MAX_RUN_TIME)
-                    ? (MAX_RUN_TIME - (millis() - runStartTime)) / 1000 : 0) +
+                    ? runStartTime + MAX_RUN_TIME : 0) +
                 ",\"maxRunTimeStop\":" + String(maxRunTimeStop ? 1 : 0) + "}";
 
+  server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+  server.send(200, "application/json", json);
+}
+
+void handleBootIds() {
+  String json = "{\"boots\":[";
+  for (int i = 0; i < bootSessionCount; i++) {
+    if (i > 0) json += ",";
+    json += "{\"id\":" + String(bootSessions[i].bootId) +
+            ",\"duration\":" + String(bootSessions[i].duration) +
+            ",\"totalWh\":" + String(bootSessions[i].totalWh) + "}";
+  }
+  json += "],\"currentBoot\":" + String(currentBootId) + "}";
   server.sendHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   server.send(200, "application/json", json);
 }
@@ -1069,7 +1076,15 @@ void handleData() {
   }
 
   String logHex = "";
-  int sentCount = getLogHex(logHex, count, sinceBootId, sinceTimeSec);
+  String dir = server.hasArg("dir") ? server.arg("dir") : "";
+  int sentCount;
+  if (dir == "back") {
+    sentCount = getLogHexBackward(logHex, count, sinceBootId, sinceTimeSec);
+  } else if (dir == "fromboot") {
+    sentCount = getLogHexFromBoot(logHex, count, sinceBootId, sinceTimeSec);
+  } else {
+    sentCount = getLogHex(logHex, count, sinceBootId, sinceTimeSec);
+  }
 
   json += ",\"totalLogs\":" + String(getTotalLogs()) +
           ",\"sentCount\":" + String(sentCount) +
@@ -1341,6 +1356,7 @@ void setup() {
   server.on("/api/sector_hex", handleSectorHex);
   server.on("/status", handleStatus);
   server.on("/data/api", handleData);
+  server.on("/data/boots", handleBootIds);
   server.on("/control", handleControl);
   server.on("/settings/clear", handleClearFlash);
   server.on("/settings/api", handleSettingsApi);

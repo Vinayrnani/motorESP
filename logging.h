@@ -68,6 +68,7 @@ struct BootSession {
   uint16_t offset;
   uint32_t duration;
   uint32_t startUnix;
+  uint32_t totalWh;
 };
 
 extern BootSession* bootSessions;
@@ -87,6 +88,8 @@ bool logPumpData(const PZEMData &data, uint8_t states, unsigned long forceInterv
 bool isMetaEntry(const LogEntry &entry);
 bool validLogEntry(const LogEntry &entry);
 int getLogHex(String& hex, int maxEntries = 200, uint8_t sinceBootId = 0, uint32_t sinceTimeSec = 0);
+int getLogHexBackward(String& hex, int maxEntries = 200, uint8_t olderThanBootId = 0, uint32_t olderThanTimeSec = 0);
+int getLogHexFromBoot(String& hex, int maxEntries = 200, uint8_t bootId = 0, uint32_t afterTimeSec = 0);
 int getTotalLogs();
 void clearLogs();
 void writeCorrectionLog(uint8_t bootId, uint32_t duration);

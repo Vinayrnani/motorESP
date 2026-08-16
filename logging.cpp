@@ -134,6 +134,11 @@ void initLogging(uint8_t bootId) {
       totalLogsCached++;
     }
 
+    uint32_t wh = 0;
+    if (!isMetaEntry(entry) && validLogEntry(entry)) {
+      wh = entry.energyDelta;
+    }
+
     if (s != startSector || o != 0) {
       int foundIdx = -1;
       for (int i = 0; i < bootSessionCount; i++) {
@@ -153,12 +158,14 @@ void initLogging(uint8_t bootId) {
         bootSessions[bootSessionCount].offset = o;
         bootSessions[bootSessionCount].duration = entry.timeSec;
         bootSessions[bootSessionCount].startUnix = 0;
+        bootSessions[bootSessionCount].totalWh = wh;
         foundIdx = bootSessionCount;
         bootSessionCount++;
       } else {
         if (entry.timeSec > bootSessions[foundIdx].duration) {
           bootSessions[foundIdx].duration = entry.timeSec;
         }
+        bootSessions[foundIdx].totalWh += wh;
       }
     }
 
@@ -186,6 +193,7 @@ void initLogging(uint8_t bootId) {
     bootSessions[bootSessionCount].offset = currentOffset;
     bootSessions[bootSessionCount].duration = 0;
     bootSessions[bootSessionCount].startUnix = 0;
+    bootSessions[bootSessionCount].totalWh = 0;
     bootSessionCount++;
   }
 }
@@ -234,11 +242,13 @@ bool logPumpData(const PZEMData &data, uint8_t states, unsigned long forceInterv
     bootSessions[bootSessionCount].offset = currentOffset;
     bootSessions[bootSessionCount].duration = entry.timeSec;
     bootSessions[bootSessionCount].startUnix = 0;
+    bootSessions[bootSessionCount].totalWh = entry.energyDelta;
     bootSessionCount++;
   } else {
     if (entry.timeSec > bootSessions[curIdx].duration) {
       bootSessions[curIdx].duration = entry.timeSec;
     }
+    bootSessions[curIdx].totalWh += entry.energyDelta;
   }
 
   uint32_t writeAddr = FLASH_LOG_START + (currentSector * FLASH_SECTOR_SIZE) + (currentOffset * sizeof(LogEntry));
@@ -380,6 +390,111 @@ int getLogHex(String& hex, int maxEntries, uint8_t sinceBootId, uint32_t sinceTi
       currentO = 0;
       currentS = (currentS + 1) % FLASH_NUM_SECTORS;
     }
+  }
+
+  return sent;
+}
+
+int getLogHexBackward(String& hex, int maxEntries, uint8_t olderThanBootId, uint32_t olderThanTimeSec) {
+  hex.reserve(maxEntries * 22);
+  int sent = 0;
+
+  int s = currentSector;
+  int o = currentOffset;
+
+  // Step back from the write position to the newest entry
+  if (o == 0) { o = LOGS_PER_SECTOR - 1; s = (s + FLASH_NUM_SECTORS - 1) % FLASH_NUM_SECTORS; }
+  else { o--; }
+
+  if (olderThanBootId != 0 || olderThanTimeSec != 0) {
+    // Walk backward to find the cursor entry, then continue past it (older side)
+    bool found = false;
+    int guard = 0;
+    while (guard++ < MAX_LOG_ENTRIES) {
+      ESP.wdtFeed();
+      uint32_t addr = FLASH_LOG_START + (s * FLASH_SECTOR_SIZE) + (o * sizeof(LogEntry));
+      LogEntry entry;
+      ESP.flashRead(addr, (uint8_t*)&entry, sizeof(LogEntry));
+      if (entry.timeSec == 0xFFFFFFFF) break;  // erased — cursor not present
+      if (!isMetaEntry(entry) && validLogEntry(entry) &&
+          entry.bootId == olderThanBootId && entry.timeSec == olderThanTimeSec) {
+        if (o == 0) { o = LOGS_PER_SECTOR - 1; s = (s + FLASH_NUM_SECTORS - 1) % FLASH_NUM_SECTORS; }
+        else { o--; }
+        found = true;
+        break;
+      }
+      if (o == 0) { o = LOGS_PER_SECTOR - 1; s = (s + FLASH_NUM_SECTORS - 1) % FLASH_NUM_SECTORS; }
+      else { o--; }
+    }
+    if (!found) return 0;
+  }
+
+  int s0 = s, o0 = o;
+  int scans = 0;
+  while (sent < maxEntries) {
+    if (scans % 50 == 0) ESP.wdtFeed();
+    scans++;
+
+    uint32_t addr = FLASH_LOG_START + (s * FLASH_SECTOR_SIZE) + (o * sizeof(LogEntry));
+    LogEntry entry;
+    ESP.flashRead(addr, (uint8_t*)&entry, sizeof(LogEntry));
+    if (entry.timeSec == 0xFFFFFFFF) break;  // reached oldest edge
+
+    if (!isMetaEntry(entry) && validLogEntry(entry)) {
+      uint8_t* ptr = (uint8_t*)&entry;
+      for (int j = 0; j < sizeof(LogEntry); j++) {
+        if (ptr[j] < 16) hex += "0";
+        hex += String(ptr[j], HEX);
+      }
+      sent++;
+    }
+
+    if (o == 0) { o = LOGS_PER_SECTOR - 1; s = (s + FLASH_NUM_SECTORS - 1) % FLASH_NUM_SECTORS; }
+    else { o--; }
+    if (s == s0 && o == o0) break;  // wrapped full circle
+  }
+
+  return sent;
+}
+
+int getLogHexFromBoot(String& hex, int maxEntries, uint8_t bootId, uint32_t afterTimeSec) {
+  hex.reserve(maxEntries * 22);
+  int sent = 0;
+
+  int s = -1, o = -1;
+  for (int i = bootSessionCount - 1; i >= 0; i--) {
+    if (bootSessions[i].bootId == bootId) {
+      s = bootSessions[i].sector;
+      o = bootSessions[i].offset;
+      break;
+    }
+  }
+  if (s == -1) return 0;
+
+  bool skipUntilCursor = (afterTimeSec != 0);
+  while (sent < maxEntries && !(s == currentSector && o == currentOffset)) {
+    if (sent % 50 == 0) ESP.wdtFeed();
+    uint32_t addr = FLASH_LOG_START + (s * FLASH_SECTOR_SIZE) + (o * sizeof(LogEntry));
+    LogEntry entry;
+    ESP.flashRead(addr, (uint8_t*)&entry, sizeof(LogEntry));
+    if (entry.timeSec == 0xFFFFFFFF) break;
+    if (entry.bootId != bootId) break;  // passed the end of this boot's data
+
+    if (skipUntilCursor) {
+      if (!isMetaEntry(entry) && validLogEntry(entry) && entry.timeSec == afterTimeSec) {
+        skipUntilCursor = false;
+      }
+    } else if (!isMetaEntry(entry) && validLogEntry(entry)) {
+      uint8_t* ptr = (uint8_t*)&entry;
+      for (int j = 0; j < sizeof(LogEntry); j++) {
+        if (ptr[j] < 16) hex += "0";
+        hex += String(ptr[j], HEX);
+      }
+      sent++;
+    }
+
+    o++;
+    if (o >= LOGS_PER_SECTOR) { o = 0; s = (s + 1) % FLASH_NUM_SECTORS; }
   }
 
   return sent;
