@@ -39,6 +39,40 @@ rm -rf build/.cache   # stale-cache bug: source edits sometimes not picked up �
 
 Network: mDNS `motorESP.local`, static IP ends in `.72`. AP fallback SSID `motorESP` (after 20s) with DNS captive portal, rescans every 15s.
 
+## Reverse Tunnel (CGNAT traversal)
+
+The ESP is behind ISP CGNAT; remote access goes through an outbound raw-TCP
+tunnel to a VM relay (no port forwarding):
+
+```
+Browser ──► VM :8280 (relay) ──► VM :9000 (tunnel) ◄── ESP dials OUT
+```
+
+- `tunnel_client.h` defines `TunnelWebServer` (subclass of `ESP8266WebServer`):
+  when the server is idle (HC_NONE) the persistent `tunnelClient` is injected
+  as the current client — ALL routes/OTA work unchanged. **Loop order matters:**
+  `server.handleClient()` (LAN priority) then `server.handleTunnelClient()`.
+- `TUNNEL_HOST`/`TUNNEL_PORT` in `config.h`; empty host = tunnel disabled.
+  Numeric IP only, no DNS. Reconnect backoff 3s→30s (doubles on fail).
+- Keepalive is lwIP TCP-level `tunnelClient.keepAlive(30,10,3)` — no app frames.
+- Globals `tunnelClient`/`tunnelEnabled`/`tunnelState` are defined in
+  motorESP.ino (extern in header) — sat_manager.cpp also includes the header;
+  do NOT define them in the header (duplicate symbols).
+- `/status` includes `"tunnel":"connected|connecting|wait_wifi|disabled"`.
+- Relay (VM): `relay/tunnel_relay.js` (Node, zero deps) — requests are HTTP-
+  framed and FIFO-queued onto the single ESP stream; complete responses are
+  routed back to the owning browser (Content-Length/chunked/bodyless).
+  502 when no ESP; queue survives nothing — requests fail 502 on ESP drop.
+- systemd unit + install steps in `relay/README.md`. Ports: 9000 (tunnel,
+  must be public), 8280 (HTTP). Local test: `relay/test/fake_esp.js` + curl
+  against :8280. VM public IP: 68.233.98.190.
+- **VM iptables gotcha**: this VM's INPUT chain ends with catch-all `REJECT
+  icmp-host-prohibited` (Docker ports bypass it via FORWARD). The relay runs
+  as a plain process, so explicit ACCEPT rules for 9000/8280 are required or
+  the ESP's dial-in shows `No route to host` (fixed 2026-08-18, persisted via
+  `netfilter-persistent save`). Cloud ingress rules alone do not suffice;
+  the edge owning the public IP must forward 9000/8280 → 10.0.0.63.
+
 ## WiFi — Async State Machine (not blocking)
 
 `wifi_manager.h` uses 5 states — no blocking `delay()` in init:
@@ -193,6 +227,8 @@ web_ui.h            # 4 pages of HTML/CSS/JS (PROGMEM)
 embedded_assets.h   # 5 gzipped libs
 sector_viewer.h     # Flash hex editor
 ntp_sync.h          # NTP sync
+tunnel_client.h     # Reverse tunnel (TunnelWebServer + reconnect manager)
+relay/              # VM-side relay: tunnel_relay.js, systemd unit, fake ESP
 docs/               # Architecture docs (flash saving, logging, SAT)
 test/playwright/    # Manual smoke tests
 archive/            # Legacy eggubator files (reference only)

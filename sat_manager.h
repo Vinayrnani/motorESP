@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <ESP8266WebServer.h>
 #include "logging.h"
+#include "tunnel_client.h"   // defines TunnelWebServer (server type)
 
 // EEPROM addresses for SAT
 #define EEPROM_LAST_KNOWN_BOOT_ID 15
@@ -11,7 +12,7 @@
 
 extern uint32_t batchStartUnix;
 
-extern ESP8266WebServer server;
+extern TunnelWebServer server;
 
 void prepareBootTable();
 uint32_t getBootUptime();

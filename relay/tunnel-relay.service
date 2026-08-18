@@ -1,0 +1,24 @@
+[Unit]
+Description=motorESP reverse-tunnel relay (ESP tunnel :9000 -> public HTTP :8280)
+Documentation=file:///opt/tunnel-relay/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/tunnel-relay
+ExecStart=/usr/bin/node /opt/tunnel-relay/tunnel_relay.js
+Restart=always
+RestartSec=3
+# Optional overrides:
+# Environment=TUNNEL_PORT=9000
+# Environment=HTTP_PORT=8280
+# Environment=IDLE_MS=90000
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

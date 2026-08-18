@@ -75,6 +75,10 @@ Pre-start: voltage ≥ 280V (critical) blocks start; ≥ 250V (warning) shows wa
 - mDNS `motorESP.local`, static IP ending `.72`
 - AP fallback SSID `motorESP` after 20s (with DNS captive portal), rescans every 15s
 - WiFi independent of pump state — pump keeps running on WiFi loss; silent reconnect; flash logging unaffected
+- **Reverse tunnel** for remote access behind CGNAT: the ESP dials OUT to the
+  relay VM (`TUNNEL_HOST`/`TUNNEL_PORT` in `config.h`, empty = disabled) and
+  public HTTP is bridged back over that socket. See `relay/README.md` for the
+  VM-side service and `tunnel_client.h` for the ESP-side mechanics.
 
 ## EEPROM Layout (512 bytes)
 

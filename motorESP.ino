@@ -22,6 +22,7 @@
 #include "embedded_assets.h"
 #include "sat_manager.h"
 #include "ntp_sync.h"
+#include "tunnel_client.h"
 
 // ============================================
 // MOCK MODE GLOBALS (defined here — single TU)
@@ -318,8 +319,11 @@ uint8_t getOverlapMask() {
 // ============================================
 // WEB SERVER
 // ============================================
-ESP8266WebServer server(80);
+TunnelWebServer server(80);
 ESP8266HTTPUpdateServer httpUpdater;
+WiFiClient tunnelClient;
+bool tunnelEnabled = false;
+TunnelState tunnelState = TUNNEL_WAIT_WIFI;
 
 uint32_t batchStartUnix = 0;
 
@@ -1023,6 +1027,13 @@ void handleStatus() {
                 ",\"heapFree\":" + String(ESP.getFreeHeap()) +
                 ",\"ip\":\"" + WiFi.localIP().toString() + "\"" +
                 ",\"rssi\":" + String(WiFi.RSSI()) +
+                ",\"tunnel\":\"" + String(tunnelStateName()) + "\"" +
+                ",\"tunnelAvail\":" + String((int)tunnelClient.available()) +
+                ",\"tunnelAvailHits\":" + String(sTunnelAvailHits) +
+                ",\"tunnelServed\":" + String(sTunnelServed) +
+                ",\"serverStatus\":" + String(server.currentStatus()) +
+                ",\"lanClientData\":" + String(server.lanHasClientData() ? 1 : 0) +
+                ",\"lanMaxPending\":" + String(server.lanHasMaxPending() ? 1 : 0) +
                 ",\"uptimeSec\":" + String(uptimeSec) +
                 ",\"bootId\":" + String(currentBootId) +
                 ",\"currentSector\":" + String(currentSector) +
@@ -1347,6 +1358,7 @@ void setup() {
   loadWifiCredentials();
 
   initWiFi();  // non-blocking
+  tunnelSetup();
 
   server.on("/", handleRoot);
   server.on("/dashboard", handleDashboardPage);
@@ -1367,7 +1379,8 @@ void setup() {
   }
   httpUpdater.setup(&server);
   server.onNotFound([]() {
-    server.sendHeader("Location", "http://motorESP.local/", true);
+    // Root-relative redirect: works both on LAN (motorESP.local) and over the tunnel
+    server.sendHeader("Location", "/", true);
     server.send(302, "text/plain", "");
   });
   server.begin();
@@ -1395,7 +1408,9 @@ void setup() {
 void loop() {
   handleWiFi();
   handleNtpSync();
-  server.handleClient();
+  handleTunnelManager();   // dial/reconnect the reverse tunnel (non-blocking)
+  server.handleClient();   // LAN clients first — they win idle-server races
+  server.handleTunnelClient();
   static bool mdnsStarted = false;
   if (!mdnsStarted && WiFi.getMode() != WIFI_OFF) {
     mdnsStarted = MDNS.begin("motorESP");

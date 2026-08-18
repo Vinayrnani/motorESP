@@ -85,6 +85,12 @@ extern unsigned long LOG_INTERVAL_OFF;      // 60000ms
 #define AP_SSID "motorESP"
 #define MDNS_HOSTNAME "motorESP"
 
+// Reverse tunnel (CGNAT traversal): ESP dials OUT to the relay on the VM,
+// public HTTP arrives over that persistent socket. Numeric IP only — the
+// ESP resolves no DNS for the tunnel. Empty string disables the tunnel.
+#define TUNNEL_HOST "68.233.98.190"   // VM public IP (relay: ESP tunnel :9000)
+#define TUNNEL_PORT 9000
+
 // OTA
 #define FIRMWARE_VERSION "1.0.0"
 
