@@ -428,30 +428,40 @@ let _offlineEl=null,_offlineT=null;
 function hexToBytes(h){const b=[];for(let i=0;i<h.length;i+=2)b.push(parseInt(h.substr(i,2),16));return b}
 
 const pollSel=$('pollSel');
-let chartMain,selectedBoot=0,livePower=[],liveCurrent=[],liveTimestamps=[];
+let chartMain,selectedBoot=0,livePower=[],liveCurrent=[],liveVoltage=[],liveTimestamps=[];
 
 function createChart(){
   if(typeof Chart==='undefined')return null;
   return new Chart($('chartMain'),{type:'line',data:{labels:[],datasets:[
-    {label:'Power (W)',data:[],borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,.12)',fill:true,borderWidth:2,pointRadius:0,tension:.3,yAxisID:'yPower',order:2},
+    {label:'Voltage (V)',data:[],borderColor:'#f59e0b',backgroundColor:'transparent',fill:false,borderWidth:2,pointRadius:0,tension:.3,yAxisID:'yVolt',order:3},
+    {label:'Power (W)',data:[],borderColor:'#3b82f6',backgroundColor:'transparent',fill:false,borderWidth:2,pointRadius:0,tension:.3,yAxisID:'yPower',order:2},
     {label:'Current (A)',data:[],borderColor:'#22c55e',backgroundColor:'transparent',fill:false,borderWidth:2,pointRadius:0,tension:.3,yAxisID:'yCurrent',order:1}
   ]},options:{animation:false,responsive:true,maintainAspectRatio:false,interaction:{intersect:false,mode:'index'},
-    plugins:{legend:{position:'top',labels:{boxWidth:12,padding:12,font:{size:11,weight:'600'}}},
-      tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+c.parsed.y.toFixed(c.datasetIndex===0?0:2)}}},
+    layout:{padding:{left:0,right:0}},
+    plugins:{legend:{position:'top',labels:{boxWidth:12,padding:8,font:{size:10,weight:'600'}}},
+      tooltip:{callbacks:{label:function(c){return c.dataset.label+': '+c.parsed.y.toFixed(c.datasetIndex===0?0:c.datasetIndex===1?0:2)}}},
       zoom:{pan:{enabled:true,mode:'x'},zoom:{wheel:{enabled:true},pinch:{enabled:true},drag:{enabled:false},mode:'x'}}},
     scales:{x:{display:true, ticks:{maxRotation:45,font:{size:9},maxTicksLimit:10,autoSkip:true}},
-      yPower:{type:'linear',position:'left',beginAtZero:true,title:{display:true,text:'Power (W)',font:{size:10}},grid:{color:'rgba(0,0,0,.05)'},ticks:{font:{size:10}}},
-      yCurrent:{type:'linear',position:'right',beginAtZero:true,title:{display:true,text:'Current (A)',font:{size:10}},grid:{drawOnChartArea:false},ticks:{font:{size:10}}}}}});
+      yVolt:{type:'linear',position:'left',beginAtZero:false,grid:{color:'rgba(0,0,0,.05)'},ticks:{font:{size:10},callback:function(v){return v.toFixed(0)+'V'}}},
+      yPower:{type:'linear',position:'right',beginAtZero:true,grid:{drawOnChartArea:false},ticks:{font:{size:10}}},
+      yCurrent:{type:'linear',position:'right',offset:true,beginAtZero:true,grid:{drawOnChartArea:false},ticks:{font:{size:10}}}}}});
 }
 chartMain=createChart();
 
-function updateChart(powers,currents,label,timestamps){
+function updateChart(powers,currents,label,timestamps,voltages){
   if(!chartMain)return;
-  const n=Math.max(powers.length,currents.length);
+  const n=Math.max(powers.length,currents.length,voltages?voltages.length:0);
   const labels=timestamps?timestamps.map(t=>{const d=new Date(t);return d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0')}):Array.from({length:n},(_,i)=>i);
+  if(voltages&&voltages.length){
+    const mn=Math.min(...voltages),mx=Math.max(...voltages);
+    const pad=Math.max(5,Math.ceil((mx-mn)/2));
+    chartMain.options.scales.yVolt.suggestedMin=mn-pad;
+    chartMain.options.scales.yVolt.suggestedMax=mx+pad;
+  }
   chartMain.data.labels=labels;
-  chartMain.data.datasets[0].data=powers;
-  chartMain.data.datasets[1].data=currents;
+  chartMain.data.datasets[0].data=voltages||[];
+  chartMain.data.datasets[1].data=powers;
+  chartMain.data.datasets[2].data=currents;
   chartMain.update('none');
   if($('chartLabel'))$('chartLabel').textContent=label||'';
 }
@@ -493,15 +503,16 @@ async function fetchBootLogs(bootId,count,bootStartMs){
     if(d.sentCount<count||!matched)break;
   }
   all.sort((a,b)=>a.t-b.t);
-  const powers=[],currents=[],timestamps=[];
+  const powers=[],currents=[],voltages=[],timestamps=[];
   for(const e of all){
     const v=200+e.b[4];
     const a=(e.b[5]|(e.b[6]<<8))/10;
     powers.push(Math.round(v*a));
     currents.push(parseFloat(a.toFixed(1)));
+    voltages.push(v);
     if(bootStartMs)timestamps.push(bootStartMs+e.t*1000);
   }
-  return{powers,currents,timestamps,total:all.length};
+  return{powers,currents,voltages,timestamps,total:all.length};
 }
 
 function fmtDur(s){if(!s)return'';const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);return(h?h+'h ':'')+m+'m'}
@@ -521,7 +532,7 @@ async function discoverBoots(){
 
 async function loadBootData(){
   const sel=$('bootSel'),bootId=parseInt(sel.value);
-  if(!bootId){selectedBoot=0;livePower=[];liveCurrent=[];liveTimestamps=[];updateChart([],[],'Live — waiting for data…');return}
+  if(!bootId){selectedBoot=0;livePower=[];liveCurrent=[];liveVoltage=[];liveTimestamps=[];updateChart([],[],'Live — waiting for data…');return}
   selectedBoot=bootId;
   if($('chartLabel'))$('chartLabel').textContent='Loading boot #'+bootId+'…';
   try{
@@ -533,7 +544,7 @@ async function loadBootData(){
     const serverNowMs=st.timeValid?st.timeUnix*1000:Date.now();
     const bootStartMs=serverNowMs-bootDurMs;
     const r=await fetchBootLogs(bootId,200,bootStartMs);
-    updateChart(r.powers,r.currents,'Boot #'+bootId+' — '+r.total+' entries, '+Math.round(r.powers[r.powers.length-1]||0)+' W last',r.timestamps);
+    updateChart(r.powers,r.currents,'Boot #'+bootId+' — '+r.total+' entries',r.timestamps,r.voltages);
   }catch(e){if($('chartLabel'))$('chartLabel').textContent='Failed to load boot #'+bootId}
 }
 $('bootSel').addEventListener('change',loadBootData);
@@ -548,9 +559,9 @@ async function refresh(){
     const vs=$('voltageStatus');if(!s.pzemValid&&!s.mock){vs.className='voltage-status vs-none';vs.textContent='METER OFFLINE'}else{vs.className='voltage-status '+({NORMAL:'vs-normal',WARNING:'vs-warning',CRITICAL:'vs-critical'}[s.voltageStatus]||'vs-normal');vs.textContent={NORMAL:'VOLTAGE OK',WARNING:'VOLTAGE HIGH',CRITICAL:'VOLTAGE CRITICAL'}[s.voltageStatus]||s.voltageStatus}
     $('dashMeterHint').style.display=(!s.pzemValid&&!s.mock)?'block':'none';
     if(!selectedBoot&&(s.pumpState==='RUNNING'||s.pumpState==='STARTING')){
-      livePower.push(Math.round(s.power));liveCurrent.push(s.current);liveTimestamps.push(Date.now());
-      if(livePower.length>200){livePower.shift();liveCurrent.shift();liveTimestamps.shift()}
-      updateChart(livePower,liveCurrent,'Live — '+livePower.length+' points',liveTimestamps);
+      livePower.push(Math.round(s.power));liveCurrent.push(s.current);liveVoltage.push(s.voltage);liveTimestamps.push(Date.now());
+      if(livePower.length>200){livePower.shift();liveCurrent.shift();liveVoltage.shift();liveTimestamps.shift()}
+      updateChart(livePower,liveCurrent,'Live — '+livePower.length+' points',liveTimestamps,liveVoltage);
     }
     lastGoodTs=new Date();document.querySelector('.numerics').classList.remove('stale');$('lastUpd').textContent='last update '+lastGoodTs.toLocaleTimeString()
   }catch(e){$('lastUpd').textContent=lastGoodTs?'⚠ STALE — last '+lastGoodTs.toLocaleTimeString()+' · unreachable':'unreachable — retrying…';const n=document.querySelector('.numerics');if(n)n.classList.add('stale')}}
