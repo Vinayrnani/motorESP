@@ -235,13 +235,15 @@ const tunnelServer = net.createServer((sock) => {
     espSocket.destroy();
   }
   espSocket = sock;
+  espBuf = Buffer.alloc(0);            /* clean slate for the new tunnel */
   sock.setNoDelay(true);
   sock.on('data', espData);
   sock.on('error', () => {});
   sock.on('close', () => {
-    if (espSocket === sock) {
-      espSocket = null;
-      warmed = false;
+     if (espSocket === sock) {
+       espSocket = null;
+       espBuf = Buffer.alloc(0);       /* drop partial bytes from the dead socket */
+       warmed = false;
       /* Every queued request was already flushed to the dead ESP and will
        * never be answered: fail them so browsers don't hang.             */
       const lost = reqQueue.length;
@@ -276,6 +278,7 @@ function flushToEsp() {
 setInterval(() => {
   if (!espSocket || reqQueue.length === 0) return;
   const head = reqQueue[0];
+  if (head.noStall) return;                 /* OTA: silent-by-design         */
   if (head.sent && head.sentAt && Date.now() - head.sentAt >= STALL_MS) {
     log(`esp silent — head ${head.method} ${head.path || '?'} unanswered ${STALL_MS}ms — forcing reconnect`);
     espSocket.destroy();
@@ -319,8 +322,12 @@ const httpServer = net.createServer((sock) => {
     if (reqQueue.length >= MAX_QUEUE) { sock.end(errPage(503, 'Service Unavailable')); return; }
 
     const cacheable = method === 'GET' && (/^\/lib\//.test(path) || path === '/data/boots');
+    /* OTA uploads legitimately take 30-60s (slow tunnel + flash write) while
+     * the ESP is silent — exempt them from the stall watchdog so the socket
+     * isn't torn down mid-update. A real ESP death still fires close/error. */
+    const noStall = method === 'POST' && path === '/update';
     reqQueue.push({ sock, buf, method, sent: false,
-                    path, cacheable,
+                    path, cacheable, noStall,
                     cacheTtlMs: cacheable && !/^\/lib\//.test(path) ? TTL_CACHE_MS : 0 });
     log(`req ${method} ${path} -> esp (queue=${reqQueue.length})`);
 

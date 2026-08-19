@@ -1071,6 +1071,7 @@ void handleStatus() {
                 ",\"pzemValid\":" + String(pzem.valid ? 1 : 0) +
                 ",\"pumpState\":\"" + pumpStateName() + "\"" +
                 ",\"pumpStateRaw\":" + String((int)pumpState) +
+                ",\"statusCode\":" + String(currentStatusCode()) +
                 ",\"pumpMode\":" + String(pumpMode) +
                 ",\"trips\":" + String(activeTrips) +
                 ",\"tripNames\":\"" + statesName(activeTrips) + "\"" +

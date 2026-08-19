@@ -84,10 +84,15 @@ body.off-mode .sticky-ctrl{transform:none}
 .rr{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid #f1f5f9}
 .rr:last-child{border-bottom:none}
 .rr span{color:#64748b}.rr b{color:#0f172a;font-variant-numeric:tabular-nums}
-.info-tip{position:relative;display:inline-block;margin-left:4px;cursor:help}
-.info-tip .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#f1f5f9;font-size:10px;line-height:1.5;font-weight:400;padding:8px 10px;border-radius:8px;white-space:nowrap;z-index:20}
+.info-tip{position:relative;display:inline-block;margin-left:4px;cursor:help;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+.info-tip .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#f1f5f9;font-size:10px;line-height:1.5;font-weight:400;padding:8px 10px;border-radius:8px;white-space:normal;text-align:left;width:max-content;max-width:min(260px,78vw);z-index:20}
 .info-tip:hover .tip{display:block}
+.info-tip.tap .tip{display:block}
 .info-tip .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1e293b}
+@media(max-width:600px){.info-tip .tip{position:fixed;left:50%;transform:translateX(-50%);bottom:auto;top:14vh;max-width:86vw}.info-tip .tip::after{display:none}}
+.hero-status .info-tip{font-size:12px;vertical-align:super;margin-left:6px}
+.hero-status .info-tip .tip{white-space:normal;max-width:250px;text-align:left}
+.hero-tag.ht-meter{background:#1e293b;color:#f1f5f9}
 
 .sticky-ctrl{position:fixed;bottom:52px;left:0;right:0;z-index:9;padding:10px 16px 10px;background:#fff;border-top:1px solid #e2e8f0;box-shadow:0 -2px 10px rgba(0,0,0,.04);pointer-events:none}
 .sticky-ctrl>*{pointer-events:auto}
@@ -180,8 +185,13 @@ body.off-mode .sticky-ctrl{transform:none}
 
 <script>
 const $=id=>document.getElementById(id);
+let openTipIdx=-1;
+function applyTip(){var tips=document.querySelectorAll('.info-tip');for(var i=0;i<tips.length;i++)tips[i].classList.toggle('tap',i===openTipIdx)}
 const TRIP_PLAIN={2:"Overload — the pump drew too much current",4:"No Water — the pump ran dry",
   8:"Voltage too high",16:"Voltage too low",64:"Power sensor fault",128:"Pump did not start"};
+const CODE_LBL=['OFF','STARTING · manual','STARTING · schedule','STARTING · physical','STARTING · retry (was manual)','STARTING · retry (was schedule)','STARTING · retry (was physical)','RUNNING · manual','RUNNING · schedule','RUNNING · physical','RUNNING · auto retry (was manual)','RUNNING · auto retry (was schedule)','RUNNING · auto retry (was physical)','RUNNING · merged (was manual)','RUNNING · merged (was physical)','RUNNING · retry after merge (was manual)','RUNNING · retry after merge (was physical)','STOPPING · manual','STOPPING · schedule','STOPPING · max run','TRIPPED · OVERLOAD','TRIPPED · NO WATER','TRIPPED · HIGH VOLTAGE','TRIPPED · LOW VOLTAGE','TRIPPED · PZEM FAULT','TRIPPED · START FAIL'];
+const CAUSES_STARTFAIL='Causes: dead contactor coil · blown fuse · seized motor · broken wire';
+const CODE_TIP=['','Starting — initiated from the app.','Starting — scheduled start time reached.','Starting — started externally (physical switch/relay).','Starting — auto-retry after a trip (was manual).','Starting — auto-retry after a trip (was schedule).','Starting — auto-retry after a trip (was physical).','Running — started from the app.','Running — active schedule window.','Running — started externally (physical switch/relay).','Running — auto-restarted after a trip (was manual).','Running — auto-restarted after a trip (was schedule).','Running — auto-restarted after a trip (was physical).','Running — schedule merged with a manual start.','Running — schedule merged with a physical start.','Running — auto-retry after a trip, continuing a manual run.','Running — auto-retry after a trip, continuing a physical run.','Stopping — stopped from the app.','Stopping — schedule window ended.','Stopping — maximum run time reached.','Tripped — current exceeded the safe limit.','Tripped — no water detected (dry run).','Tripped — line voltage too high.','Tripped — line voltage too low.','Tripped — power meter lost communication.',CAUSES_STARTFAIL];
 let _offlineEl=null, _offlineT=null;
 function setupOffline(){
   _offlineEl=$('offlineToast');
@@ -232,14 +242,15 @@ async function refresh(){
     else{$('stVolt').textContent='--';$('stCur').textContent='--';$('stPow').textContent='--'}
 
     const pill=$('voltPill');
-    if(!s.pzemValid&&!s.mock){pill.className='voltage-tag vt-off';pill.textContent='METER OFFLINE'}
-    else{pill.className='voltage-tag '+({NORMAL:'vt-ok',WARNING:'vt-warn',CRITICAL:'vt-crit'}[s.voltageStatus]||'vt-ok');
+    if(!s.pzemValid&&!s.mock){pill.style.display='none'}
+    else{pill.style.display='';pill.className='voltage-tag '+({NORMAL:'vt-ok',WARNING:'vt-warn',CRITICAL:'vt-crit'}[s.voltageStatus]||'vt-ok');
       pill.textContent={NORMAL:'VOLTAGE OK',WARNING:'VOLTAGE HIGH',CRITICAL:'VOLTAGE CRITICAL'}[s.voltageStatus]||s.voltageStatus}
 
     const big=$('statusBig'),plain=$('statusPlain'),wrap=$('heroWrap'),icon=$('statusIcon');
-    if(s.pumpState==='RUNNING'){big.className='hero-status ok';big.textContent='RUNNING';wrap.className='hero ring-ok';icon.textContent='⚡';plain.textContent='Running normally.'}
-    else if(s.pumpState==='STARTING'){big.className='hero-status ok';big.textContent='STARTING…';wrap.className='hero ring-ok';icon.textContent='🔄';plain.textContent='Starting…'}
-    else if(s.pumpState==='TRIPPED'){big.className='hero-status alarm';big.textContent='SAFETY STOP';wrap.className='hero ring-alarm';icon.textContent='⚠';
+    const sc=s.statusCode,scTip=(sc>0&&sc<26)?'<span class="info-tip">ⓘ<span class="tip">'+(CODE_TIP[sc]||'')+'</span></span>':'';
+    if(s.pumpState==='RUNNING'){big.className='hero-status ok';big.innerHTML=(CODE_LBL[sc]||'RUNNING')+scTip;wrap.className='hero ring-ok';icon.textContent='⚡';plain.textContent='Running normally.'}
+    else if(s.pumpState==='STARTING'){big.className='hero-status ok';big.innerHTML=(CODE_LBL[sc]||'STARTING…')+scTip;wrap.className='hero ring-ok';icon.textContent='🔄';plain.textContent='Starting…'}
+    else if(s.pumpState==='TRIPPED'){big.className='hero-status alarm';big.innerHTML=(CODE_LBL[sc]||'SAFETY STOP')+scTip;wrap.className='hero ring-alarm';icon.textContent='⚠';
       const names=(s.tripNames||'').split('|').filter(Boolean);const lines=names.map(n=>TRIP_PLAIN[n]||n).filter(Boolean);
       plain.textContent=(s.permanentLockout?'PERMANENT LOCKOUT — too many faults.':'Stopped for safety: '+(lines.join('; ')||'a fault')+'. Press RESET, then START.')}
     else if(s.pumpMode===0){big.className='hero-status stop';big.textContent='OFF';wrap.className='hero ring-stop';icon.textContent='⏸';plain.textContent='Pump is off. Turn power ON, then press START.'}
@@ -278,11 +289,13 @@ function refreshButtons(s){
 }
 function updateHeroTags(s){
   const tags=[];
+  if(!s.pzemValid&&!s.mock)tags.push('<span class="hero-tag ht-meter">📡 Meter offline <span class="info-tip">ⓘ<span class="tip">Power meter (PZEM 004T) not responding — readings shown as --. Check wiring / RS485 connection.</span></span></span>');
   if(s.scheduleActive)tags.push('<span class="hero-tag ht-sch">⏰ Schedule</span>');
   if(s.tripBehavior)tags.push('<span class="hero-tag ht-retry">🔁 Auto Retry</span>');
   if(s.maxRunTimeStop)tags.push('<span class="hero-tag ht-maxrun">⏱ Max Run Time</span>');
   else if(s.maxRunTime>0&&s.maxRunTimeLeft>0&&(s.pumpState==='RUNNING'||s.pumpState==='STARTING'))tags.push('<span class="hero-tag ht-maxrun">⏱ '+fmtCountdown(s.maxRunTimeLeft)+'</span>');
   $('heroTags').innerHTML=tags.join('');
+  applyTip();
 }
 function updateReasonPanel(s){
   const rp=$('reasonPanel');
@@ -306,6 +319,8 @@ function tickLocal(){
   refreshButtons(L);updateHeroTags(L);updateReasonPanel(L);
 }
 setInterval(refresh,3000);refresh();setInterval(tickLocal,1000);
+document.addEventListener('touchstart',function(e){var t=e.target.closest?e.target.closest('.info-tip'):null;if(t){e.preventDefault();var tips=document.querySelectorAll('.info-tip');for(var i=0;i<tips.length;i++){if(tips[i]===t){openTipIdx=(openTipIdx===i)?-1:i;break}}applyTip()}else{openTipIdx=-1;applyTip()}},{passive:false});
+document.addEventListener('click',function(e){if(!(e.target.closest&&e.target.closest('.info-tip'))){openTipIdx=-1;applyTip()}});
 </script>
 </body>
 </html>
@@ -540,7 +555,20 @@ async function discoverBoots(){
 
 async function loadBootData(){
   const sel=$('bootSel'),bootId=parseInt(sel.value);
-  if(!bootId){selectedBoot=0;livePower=[];liveCurrent=[];liveVoltage=[];liveTimestamps=[];updateChart([],[],'Live — waiting for data…');return}
+  if(!bootId){
+    selectedBoot=0;
+    let cur=0;
+    try{const d=await(await fetch('/data/boots')).json();cur=d.currentBoot||0}catch(e){}
+    try{
+      const opt=[...sel.options].find(o=>+o.value===cur);
+      let bootStartMs=Date.now();
+      if(opt){const m=opt.textContent.match(/(\d+)h\s*(\d+)m/);if(m){const h=+m[1]||0,n=+m[2]||0;bootStartMs=Date.now()-((h*3600+n*60)*1000)}}
+      const r=await fetchBootLogs(cur,200,bootStartMs);
+      livePower=r.powers.slice();liveCurrent=r.currents.slice();liveVoltage=r.voltages.slice();liveTimestamps=r.timestamps.slice();
+      updateChart(livePower,liveCurrent,'Current boot (live) — '+livePower.length+' pts',liveTimestamps,liveVoltage);
+    }catch(e){livePower=[];liveCurrent=[];liveVoltage=[];liveTimestamps=[];updateChart([],[],'Live — waiting for data…')}
+    return;
+  }
   selectedBoot=bootId;
   if($('chartLabel'))$('chartLabel').textContent='Loading boot #'+bootId+'…';
   try{
@@ -574,7 +602,7 @@ async function refresh(){
     lastGoodTs=new Date();document.querySelector('.numerics').classList.remove('stale');$('lastUpd').textContent='last update '+lastGoodTs.toLocaleTimeString()
   }catch(e){$('lastUpd').textContent=lastGoodTs?'⚠ STALE — last '+lastGoodTs.toLocaleTimeString()+' · unreachable':'unreachable — retrying…';const n=document.querySelector('.numerics');if(n)n.classList.add('stale')}}
 pollSel.addEventListener('change',()=>{clearInterval(window._ti);window._ti=setInterval(refresh,parseInt(pollSel.value))});
-window._ti=setInterval(refresh,parseInt(pollSel.value));refresh();discoverBoots();
+window._ti=setInterval(refresh,parseInt(pollSel.value));refresh();discoverBoots();loadBootData();
 </script>
 </body>
 </html>
@@ -909,10 +937,12 @@ th{background:#f8fafc;color:#64748b;text-transform:uppercase;font-size:10px;font
 .chip-off{background:#f1f5f9;color:#475569}
 .chip-start{background:#dbeafe;color:#1e40af}
 .chip-stop{background:#fef3c7;color:#92400e}
-.info-tip{position:relative;display:inline-block;margin-left:4px;cursor:help}
-.info-tip .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#f1f5f9;font-size:10px;line-height:1.5;font-weight:400;padding:8px 10px;border-radius:8px;white-space:nowrap;z-index:20}
+.info-tip{position:relative;display:inline-block;margin-left:4px;cursor:help;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+.info-tip .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#f1f5f9;font-size:10px;line-height:1.5;font-weight:400;padding:8px 10px;border-radius:8px;white-space:normal;text-align:left;width:max-content;max-width:min(260px,78vw);z-index:20}
 .info-tip:hover .tip{display:block}
+.info-tip.tap .tip{display:block}
 .info-tip .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1e293b}
+@media(max-width:600px){.info-tip .tip{position:fixed;left:50%;transform:translateX(-50%);bottom:auto;top:14vh;max-width:86vw}.info-tip .tip::after{display:none}}
 .tab-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #e2e8f0;z-index:10;box-shadow:0 -2px 10px rgba(0,0,0,.04);padding-bottom:env(safe-area-inset-bottom,0)}
 .tab-bar a{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 0 8px;text-decoration:none;color:#94a3b8;font-size:10px;font-weight:600;gap:3px;position:relative;transition:color .15s}
 .tab-bar a.active{color:#3b82f6}
@@ -977,9 +1007,13 @@ async function loadMore(){const btn=$('loadMore'),errEl=$('loadErr');btn.disable
   if(added===0&&d.totalLogs===0){$('summary').textContent='No entries yet — saves automatically while running.'}
   else{const shown=tbody.children.length,total=d.totalLogs;if(shown>=total||added===0){$('summary').textContent=total+' total · all '+shown+' shown';btn.disabled=true;btn.textContent='✓ All loaded'}
   else{const pct=total?Math.round(shown/total*100):0;btn.disabled=false;btn.textContent='⬇ LOAD MORE ('+shown+'/'+total+' · ~'+pct+'%)';$('summary').textContent=total+' total · '+shown+' shown (newest first)'}}
+  _applyTip();
 }
 $('loadMore').onclick=loadMore;loadMore();
 fetch('/status').then(r=>r.json()).then(s=>{$('testBanner').style.display=s.mock?'block':'none'});
+var _openTip=-1;function _applyTip(){var ts=document.querySelectorAll('.info-tip');for(var i=0;i<ts.length;i++)ts[i].classList.toggle('tap',i===_openTip)}
+document.addEventListener('touchstart',function(e){var t=e.target.closest?e.target.closest('.info-tip'):null;if(t){e.preventDefault();var ts=document.querySelectorAll('.info-tip');for(var i=0;i<ts.length;i++){if(ts[i]===t){_openTip=(_openTip===i)?-1:i;break}}_applyTip()}else{_openTip=-1;_applyTip()}},{passive:false});
+document.addEventListener('click',function(e){if(!(e.target.closest&&e.target.closest('.info-tip'))){_openTip=-1;_applyTip()}});
 </script>
 </body>
 </html>
