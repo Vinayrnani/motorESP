@@ -133,7 +133,7 @@ RUNNING → ST_STOPPING (stop pulse) → OFF
 - `LOGS_PER_SECTOR` = 372 (auto from struct size), 256 sectors at `0x200000`, 95,232 total entries.
 - Meta markers: pf=0xFE sector pointer, 0xFF SAT correction (real PF 0-100 so both impossible).
 - Energy stored as delta → survives outages + PZEM 9999kWh wrap; total accumulates in RAM for /status.
-- State bits: 1 RUNNING · 2 OC · 4 DRYRUN · 8 OVERVOLT · 16 UNDERVOLT · 32 AUTO · 64 PZEM · 128 STARTFAIL.
+- **Log status codes** (`states` byte — single code, not bit flags): 0 OFF · 1-3 STARTING manual/schedule/physical · 4-6 STARTING auto-retry(was manual/schedule/physical) · 7-9 RUNNING manual/schedule/physical · 10-12 RUNNING auto-retry · 13-14 RUNNING merged(was manual/physical) · 15-16 RUNNING retry-after-merge · 17-19 STOPPING manual/schedule/max-run · 20-25 TRIPPED overcurrent/dryrun/overvoltage/undervoltage/PZEM/start-fail. Tracked via `lastStartReason` + `startWasRetry`/`runIsMerged`/`prevRunMerged` + `currentStopCode`/`lastTripCode` in motorESP.ino. Separately, `activeTrips` still uses the STATE_TRIP_* bitmask (0x02 OC · 0x04 DRY · 0x08 OV · 0x10 UV · 0x40 PZEM · 0x80 STARTFAIL) for trip state/persistence — do not confuse with the log code.
 - Brokers/browsers decode hex; skip entries with pf ≥ 0xFE.
 
 ## PZEM 004T (pzem_sensor.h)

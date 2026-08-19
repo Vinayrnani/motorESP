@@ -202,6 +202,24 @@ bool scheduleForceOff = false;
 // ============================================
 bool maxRunTimeStop = false;  // true when pump was stopped due to max run time limit
 
+// ============================================
+// STATUS CODE TRACKING (logging)
+// ============================================
+#define START_KIND_MANUAL   1
+#define START_KIND_SCHEDULE 2
+#define START_KIND_RETRY    3
+#define START_REASON_NONE     0
+#define START_REASON_MANUAL   1
+#define START_REASON_SCHEDULE 2
+#define START_REASON_PHYSICAL 3
+uint8_t lastStartReason = START_REASON_NONE; // how the current/last run started
+uint8_t lastTripCode = SC_TRIPPED_OC;        // trip code of the current TRIPPED state
+uint8_t currentStopCode = SC_STOPPING_MANUAL;// stop reason while ST_STOPPING
+bool startWasRetry = false;                  // last start came from auto-retry
+bool runIsMerged = false;                    // schedule adopted an already-running pump
+bool prevRunMerged = false;                  // run before the trip was merged (for retry-after-merge codes)
+uint8_t startBlockReason = 0;                // debug: why last startPump() returned false
+
 void loadSchedule() {
   for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
     ScheduleSettings s;
@@ -525,17 +543,25 @@ void saveWifiCredentials(const char* ssid, const char* password) {
 // ============================================
 // PUMP START / STOP / TRIP
 // ============================================
-bool startPump(bool manual) {
+bool startPump(uint8_t kind) {
   unsigned long now = millis();
-  if (activeTrips || permanentLockout) return false;
-  if (now < startFailBlockUntil) return false;
-  if (now < voltageLockUntil) return false;
-  if (powerRestored && !manual) return false;
-  if ((now - lastStopTime) < MIN_OFF_TIME) return false;
-  if (!useMockPZEM && !pzem.valid) return false;
-  if (pzem.valid && pzem.voltage >= VOLT_CRITICAL) return false;
+  startBlockReason = 0;
+  if (activeTrips || permanentLockout) { startBlockReason = 1; return false; }
+  if (now < startFailBlockUntil) { startBlockReason = 2; return false; }
+  if (now < voltageLockUntil) { startBlockReason = 3; return false; }
+  if (powerRestored && kind != START_KIND_MANUAL) { startBlockReason = 4; return false; }
+  if ((now - lastStopTime) < MIN_OFF_TIME) { startBlockReason = 5; return false; }
+  if (!useMockPZEM && !pzem.valid) { startBlockReason = 6; return false; }
+  if (pzem.valid && pzem.voltage >= VOLT_CRITICAL) { startBlockReason = 7; return false; }
 
-  if (manual) powerRestored = false;
+  if (kind == START_KIND_MANUAL) powerRestored = false;
+  if (kind == START_KIND_RETRY) {
+    startWasRetry = true;          // keep lastStartReason from the pre-trip run
+  } else {
+    lastStartReason = (kind == START_KIND_SCHEDULE) ? START_REASON_SCHEDULE : START_REASON_MANUAL;
+    startWasRetry = false;
+  }
+  runIsMerged = false;
   maxRunTimeStop = false;
   pumpState = ST_STARTING;
   stateEnterTime = now;
@@ -550,6 +576,7 @@ void requestStop() {
   unsigned long now = millis();
   if (pumpState != ST_RUNNING && pumpState != ST_STARTING) return;
   if (pumpState == ST_RUNNING && (now - runStartTime) < MIN_RUN_TIME) return;
+  currentStopCode = SC_STOPPING_MANUAL;
   pumpState = ST_STOPPING;
   stateEnterTime = now;
   fireStopPulse();
@@ -571,6 +598,16 @@ void tripPump(uint8_t tripVal) {
   stateEnterTime = now;
   activeTrips |= tripVal;
   if (newTripType) saveActiveTrips();  // Option B debounced write
+
+  switch (tripVal) {
+    case STATE_TRIP_OVERCURRENT: lastTripCode = SC_TRIPPED_OC; break;
+    case STATE_TRIP_DRYRUN:      lastTripCode = SC_TRIPPED_DRYRUN; break;
+    case STATE_TRIP_OVERVOLT:    lastTripCode = SC_TRIPPED_OVERVOLT; break;
+    case STATE_TRIP_UNDERVOLT:   lastTripCode = SC_TRIPPED_UNDERVOLT; break;
+    case STATE_PZEM_FAULT:       lastTripCode = SC_TRIPPED_PZEM; break;
+    case STATE_START_FAIL:       lastTripCode = SC_TRIPPED_STARTFAIL; break;
+  }
+  prevRunMerged = runIsMerged;
 
   // Fast fault tracking: recurred within FAST_FAULT_WINDOW of previous trip
   if (lastTripTime != 0 && (now - lastTripTime) < FAST_FAULT_WINDOW) {
@@ -607,6 +644,10 @@ void resetTrips() {
   voltageLockUntil = 0;
   startFailBlockUntil = 0;
   maxRunTimeStop = false;
+  lastStartReason = START_REASON_NONE;
+  startWasRetry = false;
+  runIsMerged = false;
+  prevRunMerged = false;
   saveActiveTrips();
 }
 
@@ -624,6 +665,9 @@ void runStateMachine() {
           pzem.valid && pzem.current >= START_SUCCESS_CURRENT &&
           (now - lastStopTime) > 1500) {
         powerRestored = false;
+        lastStartReason = START_REASON_PHYSICAL;
+        startWasRetry = false;
+        runIsMerged = false;
         pumpState = ST_RUNNING;
         runStartTime = now;
         stateEnterTime = now;
@@ -739,6 +783,7 @@ void runStateMachine() {
       // Max run time limit
       if (MAX_RUN_TIME > 0 && (now - runStartTime) >= MAX_RUN_TIME) {
         maxRunTimeStop = true;
+        currentStopCode = SC_STOPPING_MAXRUN;
         forceStop();
         break;
       }
@@ -762,7 +807,7 @@ void runStateMachine() {
           !permanentLockout && retryCount < MAX_RETRIES) {
         retryCount++;
         saveActiveTrips();
-        if (startPump(false)) {
+        if (startPump(START_KIND_RETRY)) {
           autoRetryAt = 0;
         } else {
           autoRetryAt = now + AUTORETRY_DELAY;
@@ -776,12 +821,29 @@ void runStateMachine() {
 // ============================================
 // LOGGING
 // ============================================
-uint8_t currentStatesByte() {
-  uint8_t states = 0;
-  if (pumpState == ST_RUNNING || pumpState == ST_STARTING) states |= STATE_PUMP_RUNNING;
-  if (pumpMode == PUMP_MODE_SCHEDULE) states |= STATE_AUTO_MODE;
-  states |= activeTrips;
-  return states;
+uint8_t currentStatusCode() {
+  switch (pumpState) {
+    case ST_OFF: return SC_OFF;
+    case ST_STARTING: {
+      uint8_t base = SC_STARTING_MANUAL;
+      if (lastStartReason == START_REASON_SCHEDULE) base = SC_STARTING_SCHEDULE;
+      else if (lastStartReason == START_REASON_PHYSICAL) base = SC_STARTING_PHYSICAL;
+      if (startWasRetry) base += 3;  // 4/5/6 retry variants
+      return base;
+    }
+    case ST_RUNNING: {
+      uint8_t reason = (lastStartReason == START_REASON_SCHEDULE) ? START_REASON_SCHEDULE
+                      : (lastStartReason == START_REASON_PHYSICAL) ? START_REASON_PHYSICAL
+                      : START_REASON_MANUAL;
+      if (runIsMerged) return SC_RUNNING_MERGED_MANUAL + (reason - START_REASON_MANUAL);        // 13/14
+      if (startWasRetry && prevRunMerged) return SC_RUNNING_RETRY_MERGE_MANUAL + (reason - START_REASON_MANUAL); // 15/16
+      if (startWasRetry) return SC_RUNNING_RETRY_MANUAL + (reason - START_REASON_MANUAL);       // 10/11/12
+      return SC_RUNNING_MANUAL + (reason - START_REASON_MANUAL);                                // 7/8/9
+    }
+    case ST_STOPPING: return currentStopCode;
+    case ST_TRIPPED: return lastTripCode;
+  }
+  return SC_OFF;
 }
 
 // ============================================
@@ -801,6 +863,7 @@ void handleSchedule() {
     bool anyWasRunning = false;
     for (uint8_t i = 0; i < NUM_SCHEDULES; i++) anyWasRunning |= schWasRunning[i];
     if (anyWasRunning && (pumpState == ST_RUNNING || pumpState == ST_STARTING)) {
+      currentStopCode = SC_STOPPING_SCHEDULE;
       forceStop();
       scheduleForceOff = true;
     }
@@ -816,20 +879,23 @@ void handleSchedule() {
       bool wasSchRunning = false;
       for (uint8_t i = 0; i < NUM_SCHEDULES; i++) wasSchRunning |= schWasRunning[i];
       if (!wasSchRunning) powerRestored = false;
-      if (startPump(false)) {
+        if (startPump(START_KIND_SCHEDULE)) {
+          for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
+            if (schEnabled[i] && isScheduleWindow(i)) schWasRunning[i] = true;
+          }
+        }
+      } else if (pumpState == ST_RUNNING || pumpState == ST_STARTING) {
+        // Schedule merges an existing run: adopt ownership
+        if (lastStartReason != START_REASON_SCHEDULE) runIsMerged = true;
         for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
           if (schEnabled[i] && isScheduleWindow(i)) schWasRunning[i] = true;
         }
       }
-    } else if (pumpState == ST_RUNNING || pumpState == ST_STARTING) {
-      for (uint8_t i = 0; i < NUM_SCHEDULES; i++) {
-        if (schEnabled[i] && isScheduleWindow(i)) schWasRunning[i] = true;
-      }
-    }
   } else {
     bool anyWasRunning = false;
     for (uint8_t i = 0; i < NUM_SCHEDULES; i++) anyWasRunning |= schWasRunning[i];
     if (anyWasRunning && (pumpState == ST_RUNNING || pumpState == ST_STARTING)) {
+      currentStopCode = SC_STOPPING_SCHEDULE;
       forceStop();
       scheduleForceOff = true;
     }
@@ -839,7 +905,7 @@ void handleSchedule() {
 
 void handleLogging() {
   unsigned long interval = (pumpState == ST_RUNNING) ? LOG_INTERVAL_RUNNING : LOG_INTERVAL_OFF;
-  logPumpData(pzem, currentStatesByte(), interval);
+  logPumpData(pzem, currentStatusCode(), interval);
 }
 
 // ============================================
@@ -1021,6 +1087,7 @@ void handleStatus() {
                 ",\"sfBlockEnd\":" + String(startFailBlockUntil > nowMs ? startFailBlockUntil : 0) +
                 ",\"vLockEnd\":" + String(voltageLockUntil > nowMs ? voltageLockUntil : 0) +
                 ",\"arAt\":" + String((pumpState == ST_TRIPPED && autoRetryAt != 0 && !permanentLockout && autoRetryAt > nowMs) ? autoRetryAt : 0) +
+                ",\"startBlockReason\":" + String(startBlockReason) +
                 ",\"version\":\"" + FIRMWARE_VERSION + "\"" +
                 ",\"uptime\":\"" + uptimeStr + "\"" +
                 ",\"mock\":" + String(useMockPZEM ? 1 : 0) +
@@ -1116,7 +1183,7 @@ void handleControl() {
       server.send(200, "text/plain", "BLOCKED: active trip — reset first");
     } else {
       scheduleForceOff = false;
-      if (startPump(true)) {
+      if (startPump(START_KIND_MANUAL)) {
         server.send(200, "text/plain", "Starting");
       } else {
         server.send(200, "text/plain", "BLOCKED: interlock");
@@ -1152,7 +1219,7 @@ void handleControl() {
       int s = server.arg("state").toInt();
       if (s == 0 || s == 1) {
         pumpMode = s ? PUMP_MODE_MANUAL : PUMP_MODE_OFF;
-        if (pumpMode == PUMP_MODE_OFF) { for (uint8_t i=0;i<NUM_SCHEDULES;i++) schWasRunning[i]=false; maxRunTimeStop=false; forceStop(); }
+        if (pumpMode == PUMP_MODE_OFF) { for (uint8_t i=0;i<NUM_SCHEDULES;i++) schWasRunning[i]=false; maxRunTimeStop=false; currentStopCode = SC_STOPPING_MANUAL; forceStop(); }
         saveSettings();
         server.send(200, "text/plain", s ? "Power ON" : "Power OFF");
       } else {

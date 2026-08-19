@@ -13,7 +13,7 @@ struct __attribute__((packed)) LogEntry {
   uint16_t current;     // 2 bytes - A × 10 (96 = 9.6A, 580 = 58.0A)
   uint8_t  energyDelta; // 1 byte  - Wh since last entry (0-255)
   uint8_t  pf;          // 1 byte  - PF × 100 (65 = 0.65), 0xFE/0xFF = meta marker
-  uint8_t  states;      // 1 byte  - bit flags
+  uint8_t  states;      // 1 byte  - status code (SC_* below)
   uint8_t  bootId;      // 1 byte  - boot session ID
 };
 
@@ -41,16 +41,48 @@ struct __attribute__((packed)) LogEntry {
 #define META_CORRECTION     0xFF  // pf = 0xFF means SAT correction entry
 
 // ============================================
-// STATE BITS
+// TRIP BITMASK (activeTrips — separate from log status codes)
 // ============================================
-#define STATE_PUMP_RUNNING     0x01
 #define STATE_TRIP_OVERCURRENT 0x02
 #define STATE_TRIP_DRYRUN      0x04
 #define STATE_TRIP_OVERVOLT    0x08
 #define STATE_TRIP_UNDERVOLT   0x10
-#define STATE_AUTO_MODE        0x20
 #define STATE_PZEM_FAULT       0x40
 #define STATE_START_FAIL       0x80
+
+// ============================================
+// STATUS CODES (LogEntry.states byte)
+// ============================================
+#define SC_OFF                       0
+// STARTING (1-6)
+#define SC_STARTING_MANUAL           1
+#define SC_STARTING_SCHEDULE         2
+#define SC_STARTING_PHYSICAL         3
+#define SC_STARTING_RETRY_MANUAL     4
+#define SC_STARTING_RETRY_SCHED      5
+#define SC_STARTING_RETRY_PHYS       6
+// RUNNING (7-16)
+#define SC_RUNNING_MANUAL            7
+#define SC_RUNNING_SCHEDULE          8
+#define SC_RUNNING_PHYSICAL          9
+#define SC_RUNNING_RETRY_MANUAL      10
+#define SC_RUNNING_RETRY_SCHED       11
+#define SC_RUNNING_RETRY_PHYS        12
+#define SC_RUNNING_MERGED_MANUAL     13
+#define SC_RUNNING_MERGED_PHYS       14
+#define SC_RUNNING_RETRY_MERGE_MANUAL 15
+#define SC_RUNNING_RETRY_MERGE_PHYS  16
+// STOPPING (17-19)
+#define SC_STOPPING_MANUAL           17
+#define SC_STOPPING_SCHEDULE         18
+#define SC_STOPPING_MAXRUN           19
+// TRIPPED (20-25)
+#define SC_TRIPPED_OC                20
+#define SC_TRIPPED_DRYRUN            21
+#define SC_TRIPPED_OVERVOLT          22
+#define SC_TRIPPED_UNDERVOLT         23
+#define SC_TRIPPED_PZEM              24
+#define SC_TRIPPED_STARTFAIL         25
 
 // ============================================
 // GLOBALS

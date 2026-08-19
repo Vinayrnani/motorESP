@@ -84,6 +84,10 @@ body.off-mode .sticky-ctrl{transform:none}
 .rr{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px solid #f1f5f9}
 .rr:last-child{border-bottom:none}
 .rr span{color:#64748b}.rr b{color:#0f172a;font-variant-numeric:tabular-nums}
+.info-tip{position:relative;display:inline-block;margin-left:4px;cursor:help}
+.info-tip .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#f1f5f9;font-size:10px;line-height:1.5;font-weight:400;padding:8px 10px;border-radius:8px;white-space:nowrap;z-index:20}
+.info-tip:hover .tip{display:block}
+.info-tip .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1e293b}
 
 .sticky-ctrl{position:fixed;bottom:52px;left:0;right:0;z-index:9;padding:10px 16px 10px;background:#fff;border-top:1px solid #e2e8f0;box-shadow:0 -2px 10px rgba(0,0,0,.04);pointer-events:none}
 .sticky-ctrl>*{pointer-events:auto}
@@ -149,6 +153,7 @@ body.off-mode .sticky-ctrl{transform:none}
     <div class="rr"><span>Retries used</span><b id="detRetriesUsed">—</b></div>
     <div class="rr"><span>Quick repeats</span><b id="detFast">—</b></div>
     <div class="rr"><span id="detBlockedLbl">Start blocked</span><b id="detBlocked">—</b></div>
+    <div class="rr" id="sfCausesRow" style="display:none"><span>Start-fail causes <span class="info-tip">ⓘ<span class="tip">Motor did not draw current after the start pulse. Causes: dead contactor coil · blown fuse · seized motor · broken wire</span></span></span><b>check wiring &amp; motor</b></div>
   </div>
 </div>
 
@@ -287,8 +292,11 @@ function updateReasonPanel(s){
     $('reasonBanner').textContent=names.length?('Reason: '+names.map(n=>TRIP_PLAIN[n]||n).join('; ')+(s.permanentLockout?' — LOCKOUT':'')):(s.permanentLockout?'PERMANENT LOCKOUT — press RESET after fixing the fault.':'');
     $('detRetry').textContent=fmtCountdown(s.autoRetryIn);$('detRetriesUsed').textContent=s.retryCount+' of '+s.maxRetries;
     $('detFast').textContent=s.fastFaultCount+' of '+s.maxFastFaults;$('detBlockedLbl').textContent='Start blocked';
-    $('detBlocked').textContent=s.startFailBlock>0?fmtCountdown(s.startFailBlock)+' (start-fail)':'not blocked'}
-  else{rp.classList.remove('on')}
+    $('detBlocked').textContent=s.startFailBlock>0?fmtCountdown(s.startFailBlock)+' (start-fail)':'not blocked';
+    const sf=names.some(n=>n==='StartFail');
+    $('sfCausesRow').style.display=sf?'flex':'none';
+  }
+  else{rp.classList.remove('on');$('sfCausesRow').style.display='none'}
 }
 function tickLocal(){
   if(!S.sMs)return;
@@ -899,6 +907,12 @@ th{background:#f8fafc;color:#64748b;text-transform:uppercase;font-size:10px;font
 .chip-fault{background:#fee2e2;color:#991b1b}
 .chip-auto{background:#dbeafe;color:#1e40af}
 .chip-off{background:#f1f5f9;color:#475569}
+.chip-start{background:#dbeafe;color:#1e40af}
+.chip-stop{background:#fef3c7;color:#92400e}
+.info-tip{position:relative;display:inline-block;margin-left:4px;cursor:help}
+.info-tip .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#1e293b;color:#f1f5f9;font-size:10px;line-height:1.5;font-weight:400;padding:8px 10px;border-radius:8px;white-space:nowrap;z-index:20}
+.info-tip:hover .tip{display:block}
+.info-tip .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#1e293b}
 .tab-bar{position:fixed;bottom:0;left:0;right:0;background:#fff;display:flex;border-top:1px solid #e2e8f0;z-index:10;box-shadow:0 -2px 10px rgba(0,0,0,.04);padding-bottom:env(safe-area-inset-bottom,0)}
 .tab-bar a{flex:1;display:flex;flex-direction:column;align-items:center;padding:10px 0 8px;text-decoration:none;color:#94a3b8;font-size:10px;font-weight:600;gap:3px;position:relative;transition:color .15s}
 .tab-bar a.active{color:#3b82f6}
@@ -944,9 +958,17 @@ th{background:#f8fafc;color:#64748b;text-transform:uppercase;font-size:10px;font
 const $=id=>document.getElementById(id);
 let _offlineEl=null,_offlineT=null;
 (function(){_offlineEl=$('offlineToast');const of=window.fetch;window.fetch=function(){const p=of.apply(this,arguments);p.then(()=>{if(_offlineEl)_offlineEl.style.display='none';if(_offlineT){clearTimeout(_offlineT);_offlineT=null}}).catch(()=>{if(_offlineEl){_offlineEl.style.display='block';if(_offlineT)clearTimeout(_offlineT);_offlineT=setTimeout(()=>{if(_offlineEl)_offlineEl.style.display='none'},8000)}});return p}})();
-let sinceBoot=0,sinceTime=0;const RUN=1,OC=2,DRY=4,OV=8,UV=16,AUTO=32,PZEM=64,SFAIL=128;
+let sinceBoot=0,sinceTime=0;
 function hexToBytes(h){const a=[];for(let i=0;i<h.length;i+=2)a.push(parseInt(h.substr(i,2),16));return a}
-function chips(st){const c=[];if(st&RUN)c.push('<span class="chip chip-run">RUNNING</span>');if(st&OC)c.push('<span class="chip chip-fault">OVERLOAD</span>');if(st&DRY)c.push('<span class="chip chip-fault">NO WATER</span>');if(st&OV)c.push('<span class="chip chip-fault">HIGH V</span>');if(st&UV)c.push('<span class="chip chip-fault">LOW V</span>');if(st&PZEM)c.push('<span class="chip chip-fault">PZEM</span>');if(st&SFAIL)c.push('<span class="chip chip-fault">START FAIL</span>');if(st&AUTO)c.push('<span class="chip chip-auto">AUTO</span>');if(!c.length)c.push('<span class="chip chip-off">OFF</span>');return'<span class="bits">'+c.join('')+'</span>'}
+const CODE_LBL=['OFF','STARTING · manual','STARTING · schedule','STARTING · physical','STARTING · retry (was manual)','STARTING · retry (was schedule)','STARTING · retry (was physical)','RUNNING · manual','RUNNING · schedule','RUNNING · physical','RUNNING · auto retry (was manual)','RUNNING · auto retry (was schedule)','RUNNING · auto retry (was physical)','RUNNING · merged (was manual)','RUNNING · merged (was physical)','RUNNING · retry after merge (was manual)','RUNNING · retry after merge (was physical)','STOPPING · manual','STOPPING · schedule','STOPPING · max run','TRIPPED · OVERLOAD','TRIPPED · NO WATER','TRIPPED · HIGH VOLTAGE','TRIPPED · LOW VOLTAGE','TRIPPED · PZEM FAULT','TRIPPED · START FAIL'];
+const CODE_CLS=['chip-off','chip-start','chip-start','chip-start','chip-start','chip-start','chip-start','chip-run','chip-run','chip-run','chip-run','chip-run','chip-run','chip-run','chip-run','chip-run','chip-run','chip-stop','chip-stop','chip-stop','chip-fault','chip-fault','chip-fault','chip-fault','chip-fault','chip-fault'];
+const CAUSES_STARTFAIL='Causes: dead contactor coil · blown fuse · seized motor · broken wire';
+function chips(st){
+  const cls=CODE_CLS[st]||'chip-off',lbl=CODE_LBL[st]||('CODE '+st);
+  let tip='';
+  if(st===25)tip='<span class="info-tip">ⓘ<span class="tip">'+CAUSES_STARTFAIL+'</span></span>';
+  return'<span class="bits"><span class="chip '+cls+'">'+lbl+tip+'</span></span>'
+}
 async function loadMore(){const btn=$('loadMore'),errEl=$('loadErr');btn.disabled=true;btn.textContent='Loading…';if(errEl)errEl.style.display='none';let url='/data/api?count=100&dir=back';if(sinceBoot||sinceTime)url+='&boot='+sinceBoot+'&time='+sinceTime;let d;try{d=await(await fetch(url)).json()}catch(e){btn.disabled=false;btn.textContent='⬇ LOAD MORE';if(errEl){errEl.style.display='block';errEl.textContent='Could not load — check connection.'}return}
   btn.disabled=false;btn.textContent='⬇ LOAD MORE';if(sinceBoot===0&&sinceTime===0)$('rows').innerHTML='';const rows=hexToBytes(d.logs),tbody=$('rows');let added=0;
   for(let i=0;i+11<=rows.length;i+=11){const b=rows.slice(i,i+11),timeSec=b[0]|(b[1]<<8)|(b[2]<<16)|(b[3]<<24),volt=200+b[4],cur=((b[5]|(b[6]<<8))/10).toFixed(1),pf=b[8]>=254?'-':(b[8]/100).toFixed(2),st=b[9],boot=b[10];
